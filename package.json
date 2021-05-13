@@ -1,0 +1,35 @@
+{
+  "name": "minipbjs",
+  "version": "0.1.2",
+  "description": "minimizes javascript created by pbjs for code size reduction",
+  "main": "cli/index.js",
+  "bin": {
+    "minipbjs": "bin/minipbjs"
+  },
+  "scripts": {
+    "test": "node ./tests/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/mustime/minipbjs.git"
+  },
+  "keywords": [
+    "protobuf",
+    "protobuf.js",
+    "pbjs",
+    "pbts"
+  ],
+  "author": {
+    "name": "Irvin Pang",
+    "email": "halo.irvin@gmail.com"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mustime/minipbjs/issues"
+  },
+  "homepage": "https://github.com/mustime/minipbjs#readme",
+  "dependencies": {
+    "protobufjs": "^6.11.2",
+    "uglify-js": "^3.13.6"
+  }
+}
