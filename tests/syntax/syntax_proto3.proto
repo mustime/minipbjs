@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package proto3;
+
+message Foo {
+    required uint32 a = 1;
+    string b = 2;
+}
+
+message Bar {
+    string a = 1;
+    uint64 b = 2;
+    repeated uint32 c = 3[packed = false];
+    Foo d = 4;
+    repeated Foo e = 5[packed = false];
+    map<uint32, bool> f = 6;
+    map<string, Foo> g = 7;
+    /* skipping field 8 */
+    required Puz i = 9;
+}
+
+message Puz {
+    uint32 a = 1;
+    string b = 2;
+    repeated string c = 3;
+    repeated string d = 4[packed = false];
+}
+
+message Qux {
+    repeated int32 a = 1;
+}
+
+message Quux {
+    repeated string a = 1;
+}

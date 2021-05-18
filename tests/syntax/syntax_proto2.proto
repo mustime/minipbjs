@@ -1,0 +1,35 @@
+syntax = "proto2";
+
+package proto2;
+
+message Foo {
+    required uint32 a = 1;
+    optional string b = 2;
+}
+
+message Bar {
+    optional string a = 1;
+    optional uint64 b = 2;
+    repeated uint32 c = 3;
+    optional Foo d = 4;
+    repeated Foo e = 5;
+    map<uint32, bool> f = 6;
+    map<string, Foo> g = 7;
+    /* skipping field 8 */
+    required Puz i = 9;
+}
+
+message Puz {
+    optional uint32 a = 1;
+    optional string b = 2;
+    repeated string c = 3[packed = true];
+    repeated string d = 4[packed = false];
+}
+
+message Qux {
+    repeated int32 a = 1;
+}
+
+message Quux {
+    repeated string a = 1;
+}

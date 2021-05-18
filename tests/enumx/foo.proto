@@ -1,0 +1,8 @@
+syntax = "proto2";
+
+package foo;
+
+enum Test {
+    ONE = 1;
+    TWO = 2;
+}

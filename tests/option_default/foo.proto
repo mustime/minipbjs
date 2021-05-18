@@ -1,0 +1,7 @@
+package foo;
+
+message Default {
+    optional string a = 1[default = 'x'];
+    optional int32 b = 2[default = -100];
+    optional uint64 c = 3[default = 100];
+}

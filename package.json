@@ -7,7 +7,9 @@
     "minipbjs": "bin/minipbjs"
   },
   "scripts": {
-    "test": "node ./tests/index.js"
+    "test": "tsc --build && tape 'tests/**/test.js'",
+    "build": "tsc --build",
+    "prepublishOnly": "tsc --build && chmod +x bin/minipbjs"
   },
   "repository": {
     "type": "git",
@@ -31,5 +33,9 @@
   "dependencies": {
     "protobufjs": "^6.11.2",
     "uglify-js": "^3.13.6"
+  },
+  "devDependencies": {
+    "@types/node": "^15.3.0",
+    "tape": "^5.2.2"
   }
 }

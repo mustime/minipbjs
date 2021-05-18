@@ -1,0 +1,6 @@
+package bar;
+
+message Bar {
+    optional int32 a = 1;
+    optional foo.Foo b = 2;
+}

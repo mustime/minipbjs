@@ -2,7 +2,7 @@
  * Copyright (c) 2021, Irvin Pang <halo.irvin@gmail.com>
  * All rights reserved.
  * 
- * see LICENSE file for details
+ * licensed under the MIT License
  */
 
 export class SimpleCodeGen {
