@@ -1,6 +1,6 @@
 {
   "name": "minipbjs",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "minimizes javascript created by pbjs for code size reduction",
   "main": "cli/index.js",
   "bin": {
