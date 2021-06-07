@@ -634,8 +634,10 @@ function writeType(codeGen, type, isLastOne) {
             }
             else {
                 fieldAttr.push(type_1);
-                // TODO forceNumber?
                 if (field.long) {
+                    // resolve again as non-long
+                    field.long = field.resolved = false;
+                    field.resolve();
                 }
                 fieldAttr.push(field.defaultValue);
             }

@@ -710,8 +710,10 @@ function writeType(codeGen: SimpleCodeGen, type: protobuf.Type, isLastOne: boole
                 fieldAttr.push(null);
             } else {
                 fieldAttr.push(type);
-                // TODO forceNumber?
-                if (field.long) {   
+                if (field.long) {
+                    // resolve again as non-long
+                    field.long = field.resolved = false;
+                    field.resolve();
                 }
                 fieldAttr.push(field.defaultValue);
             }
