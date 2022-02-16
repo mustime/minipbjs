@@ -1,14 +1,10 @@
-## minipbjs —— 一个减少js代码量的pbjs替代工具
+## minipbjs ![npm](https://img.shields.io/npm/v/minipbjs?color=0c0&style=flat-square)
 
 中文 | [English](https://github.com/mustime/minipbjs/blob/main/README.md)
-
-------
 
 **minipbjs**是一个基于[protobuf.js](https://github.com/protobufjs/protobuf.js)下命令行工具`pbjs`的扩展，目的在于大大减少其生成的Javascript胶水代码大小，兼容`Node.js`、浏览器和各类微信小程序（游戏）等。对于小程序（游戏）等对代码包大小有严格要求的场景尤其适用。
 
 ## 安装使用
-
-------
 
 ### 安装
 
@@ -62,8 +58,6 @@ console.log(foo.b, foo2.b, foo3.b);
 
 ## 压缩率比较
 
-------
-
 ### 原理
 
 通过`pbjs --target static`方式生成的胶水代码对每一个message都生成了`constructor`、`create`、`encode`、`decode`、`fromObject`、`toObject`等独立的函数入口，这些函数中的逻辑是和特定message结构紧密关联的，无法共用。因此当proto文件数量较为庞大，message定义较多的时候，生成的胶水代码大小往往非常巨大，哪怕开发者通过`--no-xxx`的选项指定仅保留了基础的`encode`/`decode`函数代码，其生成的min.js代码在中大型项目中往往能达到几兆大小。
@@ -75,8 +69,6 @@ console.log(foo.b, foo2.b, foo3.b);
 以实际项目为例，包含2500+ message定义的微信小游戏项目，在我的2019 rmbp 15上使用`pbjs --target static`生成的min.js代码约为5.2m，耗时约40秒；但是同样命令改用`minipbjs`（注意不要带`--target static`参数，否则生成js代码与`pbjs`一致）生成的min.js代码仅为160+kB，耗时约1.6秒。
 
 ## 使用许可
-
-------
 
 本项目基于`The MIT Liscense`发布。
 
