@@ -19,8 +19,8 @@
     "protobuf",
     "protobuf.js",
     "pbjs",
-    "minify"
-    "minimize",
+    "minify",
+    "minimize"
   ],
   "author": {
     "name": "Irvin Pang",
