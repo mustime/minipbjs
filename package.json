@@ -1,6 +1,6 @@
 {
   "name": "minipbjs",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "minimizes javascript created by pbjs for code size reduction",
   "main": "cli/index.js",
   "bin": {
@@ -19,7 +19,8 @@
     "protobuf",
     "protobuf.js",
     "pbjs",
-    "pbts"
+    "minify"
+    "minimize",
   ],
   "author": {
     "name": "Irvin Pang",
