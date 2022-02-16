@@ -32,7 +32,7 @@ tape.test('field option \'default\' test', function(test) {
     var def4 = root.foo.Default.decode(root.foo.Default.encode(def3).finish());
     test.same(def4.a, 'y', 'non-ommited optional string field should be set as specified after serialization');
     test.same(def4.b, -200, 'non-ommited optional numeric field should be set as specified after serialization');
-    test.same(def4.c, 200, 'non-ommited optional numeric field should be set as specified after serialization');
+    test.same(def4.c, protobuf.util.Long.fromBits(200, 0, true), 'non-ommited optional numeric field should be set as specified after serialization');
 
     test.end();
 });

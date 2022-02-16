@@ -10,7 +10,7 @@ message Nested {
 message MapTestIntAndString {
     map<int32, string> field_int32 = 1;
     map<uint32, bytes> field_uint32 = 2;
-    map<sint32, int64> field_sint32 = 3;
+    map<sint32, int32> field_sint32 = 3;
     map<string, double> field_string = 5;
     map<fixed32, bool> field_fixed32 = 6;
     map<sfixed32, Nested> field_sfixed32 = 7;

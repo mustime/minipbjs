@@ -77,10 +77,15 @@ const PROTOBUF          = 'protobuf',
 
 const DEFAULT_ROOT = 'default';
 
+const NUMBERIC64_ARR = [ 'int64', 'sint64', 'fixed64', 'sfixed64', 'uint64' ];
+
 let config: IOptions;
 
 function static_mini(root: protobuf.Root, options: IOptions, callback: Function): void {
     config = options;
+    if (config.forceLong && !protobuf.util.Long) {
+        throw new Error(`protobuf.util.Long is not available while '--force-long' option is specified`);
+    }
     root.name = root.name || config.root || DEFAULT_ROOT;
     let codeGen = new SimpleCodeGen(4);
     // global definition
@@ -695,24 +700,31 @@ function writeType(codeGen: SimpleCodeGen, type: protobuf.Type, isLastOne: boole
         if (field) {
             let fieldAttr: any[] = [];
             fieldAttr.push(field.name);
-            let type = field.resolvedType ? field.resolvedType.fullName : field.type;
+            let fieldType = field.resolvedType ? field.resolvedType.fullName : field.type;
             if (field.map) {
                 // map field is marked by a heading '{',
                 // follows with the comma delimited keyType and valueType
                 let mapField: protobuf.MapField = <any>field;
-                fieldAttr.push(`{${mapField.keyType},${type}`);
+                fieldAttr.push(`{${mapField.keyType},${fieldType}`);
                 // map field's default value set to null here
                 fieldAttr.push(null);
             } else if (field.repeated) {
                 // repeated field is marked by a heading '[', or '<' if packed
-                fieldAttr.push(`${field.packed ? '<' : '['}${type}`);
+                fieldAttr.push(`${field.packed ? '<' : '['}${fieldType}`);
                 // repeated field's default value set to null here
                 fieldAttr.push(null);
             } else {
-                fieldAttr.push(type);
-                if (field.long) {
-                    // resolve again as non-long
-                    field.long = field.resolved = false;
+                fieldAttr.push(fieldType);
+                if (NUMBERIC64_ARR.includes(fieldType)) {
+                    // 64bit numberic
+                    if (config.forceLong) {
+                        // resolve again as long
+                        field.long = true;
+                    } else if (config.forceNumber) {
+                        // resolve again as non-long
+                        field.long = false;
+                    }
+                    field.resolved = false;
                     field.resolve();
                 }
                 fieldAttr.push(field.defaultValue);

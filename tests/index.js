@@ -21,6 +21,7 @@ exports.TestCase = /** @class */ (function () {
         // for 'Long' implement
         if (!protobuf.util.Long) {
             protobuf.util.Long = require(path.join(__dirname, '..', 'node_modules', 'long'));
+            protobuf.configure();
         }
         return protobuf;
     }
