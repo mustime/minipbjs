@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package issues;
+
+message Issue_1 {
+    string com = 1;
+    uint32 pro = 2;
+    uint32 err = 3;
+    uint32 biz1 = 4;
+    string biz2 = 5;
+    uint32 com2 = 6;
+    bytes ext = 9;
+    bytes body = 10;
+    uint64 downstream = 11;
+    uint64 con = 12;
+    uint64 ctx = 13;
+}
