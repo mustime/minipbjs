@@ -14,7 +14,8 @@ tape.test('testcases from issues list', function(test) {
 
     var root = protobuf.roots[name];
     
-    var def = new root.issues.Issue_1({
+    // encode & decode
+    var newMsg = new root.issues.Issue_1_New({
         'com': 'field1',
         'pro': 0xc0ffee02,
         'err': 0xc0ffee03,
@@ -28,8 +29,15 @@ tape.test('testcases from issues list', function(test) {
         'ctx': protobuf.util.Long.fromBits(13, 13, true)
     });
 
-    var decoded = root.issues.Issue_1.decode(root.issues.Issue_1.encode(def).finish());
-    test.same(def, decoded, 'issue#1: value after encoded & decoded should be the same');
+    var newDecoded = root.issues.Issue_1_New.decode(root.issues.Issue_1_New.encode(newMsg).finish());
+    test.same(newMsg, newDecoded, 'issue#1: value after encoded & decoded should be the same');
+
+    // updated from legacy
+    var legacyMsg = new root.issues.Issue_1_Legacy(newMsg);
+    legacyMsg.com3 = 0xc0ffee07;
+    legacyMsg.com4 = protobuf.util.Long.fromBits(8, 8, true);
+    var legacyDecoded = root.issues.Issue_1_New.decode(root.issues.Issue_1_Legacy.encode(legacyMsg).finish());
+    test.same(newMsg, legacyDecoded, 'issue#1: new value decode from legacy message should be the same');
 
     test.end();
 });

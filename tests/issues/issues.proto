@@ -2,13 +2,32 @@ syntax = "proto3";
 
 package issues;
 
-message Issue_1 {
+message Issue_1_Legacy {
     string com = 1;
     uint32 pro = 2;
     uint32 err = 3;
     uint32 biz1 = 4;
     string biz2 = 5;
     uint32 com2 = 6;
+    uint32 com3 = 7;
+    uint64 com4 = 8;
+    bytes ext = 9;
+    bytes body = 10;
+    uint64 downstream = 11;
+    uint64 con = 12;
+    uint64 ctx = 13;
+}
+
+message Issue_1_New {
+    string com = 1;
+    uint32 pro = 2;
+    uint32 err = 3;
+    uint32 biz1 = 4;
+    string biz2 = 5;
+    uint32 com2 = 6;
+    // deleted field 7 & 8
+    // uint32 com3 = 7;
+    // uint64 com4 = 8;
     bytes ext = 9;
     bytes body = 10;
     uint64 downstream = 11;
