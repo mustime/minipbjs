@@ -767,7 +767,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                 if (config.verify) {
                     codeGen
                     .pushLine("var vals = {};")
-                    .pushLine("%s.forEach((i) => vals[%s[i]] = 1);", KEYS, VALUES)
+                    .pushLine("%s.forEach(function (i) { vals[%s[i]] = 1; });", KEYS, VALUES)
                     .pushLine("%s.%s = vals;", VALUES, RESOLVED_TYPE)
                 }
 
