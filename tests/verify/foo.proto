@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package verify;
+
+message Base {
+    double base_field = 1;
+    float base_field2 = 2;
+    int32 base_field3 = 3;
+    uint32 base_field4 = 4;
+    sint32 base_field5 = 5;
+    fixed32 base_field6 = 6;
+    sfixed32 base_field7 = 7;
+    int64 base_field8 = 8;
+    uint64 base_field9 = 9;
+    sint64 base_field10 = 10;
+    fixed64 base_field11 = 11;
+    sfixed64 base_field12 = 12;
+    bool base_field13 = 13;
+    string base_field14 = 14;
+    bytes base_field15 = 15;
+}
+
+message Map {
+    map<int32, string> map_field1 = 1;
+    map<uint32, string> map_field2 = 2;
+    map<sint32, string> map_field3 = 3;
+    map<fixed32, string> map_field4 = 4;
+    map<sfixed32, string> map_field5 = 5;
+    map<int64, string> map_field6 = 6;
+    map<uint64, string> map_field7 = 7;
+    map<sint64, string> map_field8 = 8;
+    map<fixed64, string> map_field9 = 9;
+    map<sfixed64, string> map_field10 = 10;
+    map<bool, string> map_field11 = 11;
+    map<bool, Base> map_field12 = 12;
+}
+
+message Repeated {
+    repeated double repeated_field1 = 1;
+    repeated float repeated_field2 = 2;
+    repeated int32 repeated_field3 = 3;
+    repeated uint32 repeated_field4 = 4;
+    repeated sint32 repeated_field5 = 5;
+    repeated fixed32 repeated_field6 = 6;
+    repeated sfixed32 repeated_field7 = 7;
+    repeated int64 repeated_field8 = 8;
+    repeated uint64 repeated_field9 = 9;
+    repeated sint64 repeated_field10 = 10;
+    repeated fixed64 repeated_field11 = 11;
+    repeated sfixed64 repeated_field12 = 12;
+    repeated bool repeated_field13 = 13;
+    repeated string repeated_field14 = 14;
+    repeated bytes repeated_field15 = 15;
+    repeated Base repeated_field16 = 16;
+}
+
+message Embedded {
+    Base base_field = 1;
+    Map map_field = 2;
+}
+
+enum Enum {
+    ZERO = 0;
+    ONE = 1;
+    TWO = 2;
+}
+
+message EnumMessage {
+    Enum enum_field = 1;
+}
