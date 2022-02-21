@@ -756,7 +756,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                 // helping encode/decode functions to index with all others pbtype
                 .pushLine("// exposing non-inner type to %s", ROOT)
                 .pushLine("!%s && (%s[%s + '.' + %s] = %s[%s]);", IS_INNER, ROOT, PATH, KEY, PARENT, KEY).subIndent()
-            .pushLine("} else if (%s[%s]['%s'] && Object.values(%s[%s]['%s']).every(function(v) { return Number(v) || Number(v) === 0; })) {", NAMESPACE, KEY, ENUM_PLACEHOLDER, NAMESPACE, KEY, ENUM_PLACEHOLDER).addIndent()
+            .pushLine("} else if (%s[%s]['%s'] && Object.values(%s[%s]['%s']).every(function(v) { return Number(v) === 0; })) {", NAMESPACE, KEY, ENUM_PLACEHOLDER, NAMESPACE, KEY, ENUM_PLACEHOLDER).addIndent()
                 .pushLine("// protobuf.enum")
                 .pushLine("%s[%s] = function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent()
                     .pushLine("var %s = Object.keys(%s);", KEYS, FIELD_PAYLOADS)
