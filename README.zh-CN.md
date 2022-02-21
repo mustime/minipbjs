@@ -62,7 +62,7 @@ console.log(foo.b, foo2.b, foo3.b);
 
 通过`pbjs --target static`方式生成的胶水代码对每一个message都生成了`constructor`、`create`、`encode`、`decode`、`fromObject`、`toObject`等独立的函数入口，这些函数中的逻辑是和特定message结构紧密关联的，无法共用。因此当proto文件数量较为庞大，message定义较多的时候，生成的胶水代码大小往往非常巨大，哪怕开发者通过`--no-xxx`的选项指定仅保留了基础的`encode`/`decode`函数代码，其生成的min.js代码在中大型项目中往往能达到几兆大小。
 
-`minipbjs`通过扩展`--target`实现，通过对message的基本信息（id、名称、默认值、额外options等）进行提取标记成一个map参数，把主要的函数实现（目前支持`create`/`encode`/`decode`/`encodeDelimited`/`decodeDelimited`/`fromObject`/`toObject`/`toJSON`）进行了统一实现，用于处理所有message对象。因此理论上message定义的数量越多，压缩效果越发明显。与pbjs相比，生成的代码大小几乎可以忽略，不需要再关心代码量问题了。
+`minipbjs`通过扩展`--target`实现，通过对message的基本信息（id、名称、默认值、额外options等）进行提取标记成一个map参数，把主要的函数实现（目前支持`create`/`encode`/`decode`/`encodeDelimited`/`decodeDelimited`/`fromObject`/`toObject`/`toJSON`/`verify`）进行了统一实现，用于处理所有message对象。因此理论上message定义的数量越多，压缩效果越发明显。与pbjs相比，生成的代码大小几乎可以忽略，不需要再关心代码量问题了。
 
 ### 代码压缩效果
 
