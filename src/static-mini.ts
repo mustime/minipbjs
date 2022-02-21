@@ -31,7 +31,7 @@ const PROTOBUF          = 'protobuf',
       ROOT              = '$root',
       READER_FUNCTIONS  = '$reader',
       WRITER_FUNCTIONS  = '$writer',
-      VERIFY_FUNCTIONS  = '$verify',
+      VERIFIER_FUNCTIONS  = '$verifier',
       TYPES_ARRAY       = '$types',
       WIRES_ARRAY       = '$wires',
       PACKED_ARRAY      = '$packed',
@@ -76,7 +76,16 @@ const PROTOBUF          = 'protobuf',
       PROPERTY          = 'property',
       OPTIONS           = 'options',
       VERIFY_KEY_FUNC   = 'verifyKey',
-      KEY_VERIFY_MAP    = 'keyVerifyMap';
+      KEY_VERIFY_MAP    = 'keyVerifyMap',
+      INVALID           = 'invalid',
+      NAME              = 'name',
+      REPEATED          = 'repeated',
+      KEY_TYPE          = 'keyType',
+      EXPECTED          = 'expected',
+      FIELD_INFO        = 'fieldInfo',
+      RESOLVED_TYPE     = 'resolvedType',
+      FIELD_NAME        = 'fieldName',
+      INNER_FIELD_NAME  = '$fieldName';
 
 const DEFAULT_ROOT = 'default';
 
@@ -112,11 +121,15 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
         //verifyMap
         if (config.verify) {
             codeGen
+                .pushLine("function %s({ %s, %s, %s, %s }, %s) {", INVALID, NAME, REPEATED, FIELD_MAP, KEY_TYPE, EXPECTED).addIndent()
+                    .pushLine("return %s + ': ' + %s + (%s && %s !== '%s' ? '[]' : %s && %s !== '%s' ? '{k:'+%s+'}' : '') + ' %s';", NAME, EXPECTED, REPEATED, EXPECTED, FIELD_REPEATED, FIELD_MAP, EXPECTED, OBJECT, KEY_TYPE, EXPECTED).subIndent()
+                .pushLine("}")
                 .pushLine("var %s = { int32: 'key32Re', uint32: 'key32Re', sint32: 'key32Re', fixed32: 'key32Re', sfixed32: 'key32Re', int64: 'key64Re', uint64: 'key64Re', sint64: 'key64Re', fixed64: 'key64Re', sfixed64: 'key64Re', bool: 'key2Re' };", KEY_VERIFY_MAP)
-                .pushLine("function %s(%s, %s) {", VERIFY_KEY_FUNC, TYPE, MESSAGE).addIndent()
+                .pushLine("function %s(%s, %s, %s) {", VERIFY_KEY_FUNC, TYPE, MESSAGE, FIELD_INFO).addIndent()
                     .pushLine("if (%s[%s]) {", KEY_VERIFY_MAP, TYPE).addIndent()
                         .pushLine("if (!%s.util[%s[%s]].test(%s)) {", PROTOBUF, KEY_VERIFY_MAP, TYPE, MESSAGE).addIndent()
-                            .pushLine("return 'invalid key ' + %s;", TYPE).subIndent()
+                            .pushLine("%s.%s = %s;", FIELD_INFO, KEY_TYPE, TYPE)
+                            .pushLine("return %s(%s, '%s')", INVALID, FIELD_INFO, KEY).subIndent()
                         .pushLine("}")
                         .pushLine("return null;").subIndent()
                     .pushLine("}")
@@ -127,33 +140,34 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                 .pushLine("var floatOrDoubleMap = { float: 1, double: 1 };")
                 .pushLine("var util = %s.util;", PROTOBUF)
                 .pushLine()
-                .pushLine("var %s = {", VERIFY_FUNCTIONS).addIndent()
-                    .pushLine("'%s': function(%s, %s, %s) {", TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD).addIndent()
+                .pushLine("var %s = {", VERIFIER_FUNCTIONS).addIndent()
+                    .pushLine("'%s': function(%s, %s, %s, %s) {", TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD_INFO, FIELD).addIndent()
                         .pushLine("if (%s === '$1') {", FIELD).addIndent()
-                            .pushLine("return %s(%s, %s);", VERIFY_KEY_FUNC, TYPE, MESSAGE).subIndent()
+                            .pushLine("%s.%s = true;", FIELD_INFO, FIELD_MAP)
+                            .pushLine("return %s(%s, %s, %s);", VERIFY_KEY_FUNC, TYPE, MESSAGE, FIELD_INFO).subIndent()
                         .pushLine("}")
                         .pushLine("// basic type")
                         .pushLine("if (%s[%s] !== undefined) {", WIRES_ARRAY, TYPE).addIndent()
                             .pushLine("if (type32Map[%s]) {", TYPE).addIndent()
-                                .pushLine("if (typeof %s !== 'number') return 'invalid number';", MESSAGE).subIndent()
+                                .pushLine("if (typeof %s !== 'number') return %s(%s, 'number');", MESSAGE, INVALID, FIELD_INFO).subIndent()
                             .pushLine("} else if (type64Map[%s]) {", TYPE).addIndent()
                                 .pushLine("if (!util.isInteger(%s) && !(%s && util.isInteger(%s.low) && util.isInteger(%s.high))) {", MESSAGE, MESSAGE, MESSAGE, MESSAGE).addIndent()
-                                    .pushLine("return 'invalid integer|Long';").subIndent()
+                                    .pushLine("return %s(%s, 'integer|Long');", INVALID, FIELD_INFO).subIndent()
                                 .pushLine("}").subIndent()
                             .pushLine("} else if (floatOrDoubleMap[%s]) {", TYPE).addIndent()
-                                .pushLine("if (typeof %s !== 'number') return 'invalid number';", MESSAGE).subIndent()
+                                .pushLine("if (typeof %s !== 'number') return %s(%s, 'float|double');", MESSAGE, INVALID, FIELD_INFO).subIndent()
                             .pushLine("} else if (%s === 'bool') {", TYPE).addIndent()
-                                .pushLine("if (typeof %s !== 'boolean') return 'invalid boolean';", MESSAGE).subIndent()
+                                .pushLine("if (typeof %s !== 'boolean') return %s(%s, 'boolean');", MESSAGE, INVALID, FIELD_INFO).subIndent()
                             .pushLine("} else if (%s === 'string') {", TYPE).addIndent()
-                                .pushLine("if (!util.isString(%s)) return 'invalid string';", MESSAGE).subIndent()
+                                .pushLine("if (!util.isString(%s)) return %s(%s, 'string');", MESSAGE, INVALID, FIELD_INFO).subIndent()
                             .pushLine("} else if (%s === 'bytes') {", TYPE).addIndent()
                                 .pushLine("if(!(%s && typeof %s.length ==='number' || util.isString(%s))) {", MESSAGE, MESSAGE, MESSAGE).addIndent()
-                                    .pushLine("return 'invalid bytes';").subIndent()
+                                    .pushLine("return %s(%s, 'invalid bytes');", INVALID, FIELD_INFO).subIndent()
                                 .pushLine("}").subIndent()
                             .pushLine("}")
                             .pushLine("return null;").subIndent()
                         .pushLine("}")
-                        .pushLine("if (%s[%s].$enumVerify) return %s[%s].$enumVerify(%s);", ROOT, TYPE, ROOT, TYPE, MESSAGE)
+                        .pushLine("if (%s[%s].%s) return %s[%s].%s[%s] ? null : %s(%s, 'enum value');", ROOT, TYPE, RESOLVED_TYPE, ROOT, TYPE, RESOLVED_TYPE, MESSAGE, INVALID, FIELD_INFO)
                         .pushLine("return %s[%s].verify(%s);", ROOT, TYPE, MESSAGE).subIndent()
                     .pushLine("},").subIndent()
                 .pushLine("};")
@@ -687,13 +701,15 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                             .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
                                 .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
                                 .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
+                                .pushLine("var %s = %s + '.' + %s + '.' + %s;", FIELD_NAME, PATH, KEY, FIELD)
                                 .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
                                     // map fields are inner namespace for current class
                                     .pushLine("// map field")
                                     .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
-                                        .pushLine("if (!%s.util.isObject(%s[%s])) return %s + ': object expected';", PROTOBUF, MESSAGE, FIELD, FIELD)
+                                        .pushLine("if (!%s.util.isObject(%s[%s])) return %s({ %s: %s, %s: true }, 'object');", PROTOBUF, MESSAGE, FIELD, INVALID, NAME, FIELD_NAME, FIELD_MAP, )
                                         .pushLine("let %s = Object.keys(%s[%s]);", KEYS, MESSAGE, FIELD)
                                         .pushLine("for (let i = 0; i < %s.length; ++i) {", KEYS).addIndent()
+                                            .pushLine("%s[%s].$%s[%s].%s = %s", PARENT, KEY, NAMESPACE, TYPE, INNER_FIELD_NAME, FIELD_NAME)
                                             .pushLine("let error = %s[%s].$%s[%s].verify({ '$1': %s[i], '$2': %s[%s][%s[i]] });", PARENT, KEY, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS)
                                             .pushLine("if (error) return error;").subIndent()
                                         .pushLine("}").subIndent()
@@ -703,16 +719,17 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                                     .pushLine("%s = %s.substring(1);", TYPE, TYPE)
                                     .pushLine("var %s = %s[%s];", FIELD_REPEATED, MESSAGE, FIELD)
                                     .pushLine("if (!Array.isArray(%s)) {", FIELD_REPEATED).addIndent()
-                                        .pushLine("return %s + ': array expected';", FIELD).subIndent()
+                                        .pushLine("return %s({ %s: %s, %s: true }, 'array')", INVALID, NAME, FIELD_NAME, REPEATED).subIndent()
                                     .pushLine("}")
                                     .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
-                                        .pushLine("let error = %s['%s'](%s, %s[i]);", VERIFY_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED)
+                                        .pushLine("let error = %s['%s'](%s, %s[i], { %s: %s + '['+i+']' , %s: true });", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED, NAME, FIELD_NAME, REPEATED)
                                         .pushLine("if (error) return error;").subIndent()
                                     .pushLine("}").subIndent()
                                 .pushLine("} else {").addIndent()
                                     .pushLine("// non-repeated field")
+                                    .pushLine("if (%s === '$1' || %s === '$2') %s = this.%s;", FIELD, FIELD, FIELD_NAME, INNER_FIELD_NAME)
                                     .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
-                                        .pushLine("let error = %s['%s'](%s, %s[%s], %s);", VERIFY_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD, FIELD)
+                                        .pushLine("let error = %s['%s'](%s, %s[%s], { %s: %s }, %s);", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD, NAME, FIELD_NAME, FIELD)
                                         .pushLine("if (error) return error;").subIndent()
                                     .pushLine("}").subIndent()
                                 .pushLine("}").subIndent()
@@ -751,7 +768,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                     codeGen
                     .pushLine("var vals = {};")
                     .pushLine("%s.forEach((i) => vals[%s[i]] = 1);", KEYS, VALUES)
-                    .pushLine("%s.$enumVerify = function(%s) { return vals[%s] ? null : 'invalid enum' };", VALUES, VALUE, VALUE)
+                    .pushLine("%s.%s = vals;", VALUES, RESOLVED_TYPE)
                 }
 
              codeGen.pushLine("return %s;", VALUES).subIndent()

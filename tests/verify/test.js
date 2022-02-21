@@ -32,7 +32,7 @@ tape.test('verify test', function(test) {
     };
 
     let invalidStr = root.verify.Base.verify(baseMsg);
-    test.same(invalidStr, 'invalid string', 'should be the same');
+    test.same(invalidStr, 'verify.verify.Base.base_field14: string expected', 'should be the same');
     baseMsg.base_field14 = '14';
     let baseVerified = root.verify.Base.verify(baseMsg);
     test.same(baseVerified, null, 'should be the same');
@@ -52,7 +52,7 @@ tape.test('verify test', function(test) {
         map_field12: { [true]: baseMsg },
     };
     let invalidKey = root.verify.Map.verify(mapMsg);
-    test.same(invalidKey, 'invalid key int32', 'should be the same');
+    test.same(invalidKey, 'verify.verify.Map.map_field1: key{k:int32} expected', 'should be the same');
     mapMsg.map_field1 = { 1: 'a' };
     let mapVerified = root.verify.Map.verify(mapMsg);
     test.same(mapVerified, null, 'should be the same');
@@ -77,7 +77,7 @@ tape.test('verify test', function(test) {
     };
     
     let invalidRepeatedVerified = root.verify.Repeated.verify(repeatedMsg);
-    test.same(invalidRepeatedVerified, 'invalid number', 'should be the same');
+    test.same(invalidRepeatedVerified, 'verify.verify.Repeated.repeated_field1[0]: float|double[] expected', 'should be the same');
     repeatedMsg.repeated_field1 = [1];
     let repeatedVerified = root.verify.Repeated.verify(repeatedMsg);
     test.same(repeatedVerified, null, 'should be the same');
@@ -94,6 +94,9 @@ tape.test('verify test', function(test) {
     };
     let enumVerified = root.verify.EnumMessage.verify(enumMsg);
     test.same(enumVerified, null, 'should be the same');
+    enumMsg.enum_field = 'a';
+    let invalidEnumVerified = root.verify.EnumMessage.verify(enumMsg);
+    test.same(invalidEnumVerified, 'verify.verify.EnumMessage.enum_field: enum value expected', 'should be the same');
 
     test.end();
 });
