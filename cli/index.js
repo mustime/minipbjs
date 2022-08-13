@@ -73,16 +73,15 @@ exports.main = function (argv) {
     // get uglified *.min.js
     console.log(`creating ${name}.min.js...`);
     process.argv = [ 'bala', 'bala', path.join(output, `${name}.js`), '--output', path.join(output, `${name}.min.js`), '--compress', '--mangle' ];
-    let uglifyjsPath = path.join(__dirname, '..', 'node_modules', 'uglify-js');
+    let uglifyjsPath = require.resolve('uglify-js');
     // make sure it could be exected everty time from tests
     try {
         // cnpm use symlinks
         uglifyjsPath = path.join(__dirname, '..', 'node_modules', fs.readlinkSync(uglifyjsPath));
     } catch (e) {}
 
-    var uglifyjsBin = path.join(uglifyjsPath, 'bin', 'uglifyjs');
-    delete require.cache[uglifyjsBin];
-    require(uglifyjsBin);
+    delete require.cache[uglifyjsPath];
+    require(uglifyjsPath);
 
     console.log('done');
 }
