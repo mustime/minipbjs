@@ -36,8 +36,8 @@ const PROTOBUF          = 'protobuf',
       WIRES_ARRAY       = '$wires',
       PACKED_ARRAY      = '$packed',
       CONVERTER_CREATOR = '$createConverter',
-      MESSAGE_CONVERTER = '$conv_message',
-      OBJECT_CONVERTER  = '$conv_object',
+      MESSAGE_CONVERTER = '$convMessage',
+      OBJECT_CONVERTER  = '$convObject',
       CONVERTER         = 'converter',
       CONVERT_FUNCTION  = 'convf',
       CONFIGS           = 'cfgs',
@@ -46,7 +46,9 @@ const PROTOBUF          = 'protobuf',
       VALUE             = 'value',
       VALUES            = 'values',
       TYPE_PLACEHOLDER  = '$',
-      ENUM_PLACEHOLDER  = '@',
+      MESSAGE_PLACEHOLDER = '$m',
+      SERVICE_PLACEHOLDER = '$s',
+      ENUM_PLACEHOLDER  = '$e',
       CLASS_NAME        = 'C',
       PROPERTIES        = 'props',
       TYPES             = 'types',
@@ -85,7 +87,9 @@ const PROTOBUF          = 'protobuf',
       FIELD_INFO        = 'fieldInfo',
       RESOLVED_TYPE     = 'resolvedType',
       FIELD_NAME        = 'fieldName',
-      INNER_FIELD_NAME  = '$fieldName';
+      INNER_FIELD_NAME  = '$fieldName',
+      RPC_IMPL          = 'rpcImpl',
+      RPC_METHOD        = 'rpcMethod';
 
 const DEFAULT_ROOT = 'default';
 
@@ -169,7 +173,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                         .pushLine("}")
                         .pushLine("if (%s[%s].%s) return %s[%s].%s[%s] ? null : %s(%s, 'enum value');", ROOT, TYPE, RESOLVED_TYPE, ROOT, TYPE, RESOLVED_TYPE, MESSAGE, INVALID, FIELD_INFO)
                         .pushLine("return %s[%s].verify(%s);", ROOT, TYPE, MESSAGE).subIndent()
-                    .pushLine("},").subIndent()
+                    .pushLine("}").subIndent()
                 .pushLine("};")
         }
 
@@ -237,6 +241,8 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                     .pushLine("'%s': [ 'int64', 'sint64', 'fixed64', 'sfixed64', 'uint64' ],", TYPES)
                     .pushLine("'%s': function(%s, %s) {", CONVERT_FUNCTION, VALUE, TYPE).addIndent()
                         .pushLine("var %s = undefined;", RETURN_VALUE)
+                        // FIXME: support for --force-long/--force-number
+                        .pushLine("// FIXME: support for --force-long/--force-number")
                         .pushLine("if (%s.util.Long) {", PROTOBUF).addIndent()
                             .pushLine("%s = %s.util.Long.fromValue(%s);", RETURN_VALUE, PROTOBUF, VALUE)
                             .pushLine("%s.unsigned = %s.charAt(0) === 'u';", RETURN_VALUE, TYPE).subIndent()
@@ -290,6 +296,8 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                             .pushLine("return %s.longs === String ? String(%s) : %s;", OPTIONS, VALUE, VALUE).subIndent()
                         .pushLine("}")
                         .pushLine("if (%s.longs === String) {", OPTIONS).addIndent()
+                            // FIXME: support for --force-long/--force-number
+                            .pushLine("// FIXME: support for --force-long/--force-number")
                             .pushLine("return %s.util.Long.prototype.toString.call(%s);", PROTOBUF, VALUE).subIndent()
                         .pushLine("} else if (%s.longs === Number) {", OPTIONS).addIndent()
                             .pushLine("return new %s.util.LongBits(%s.low >>> 0, %s.high >>> 0).toNumber(%s.charAt(0) === 'u');", PROTOBUF, VALUE, VALUE, TYPE).subIndent()
@@ -335,11 +343,12 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
             // iterates namespaces
             .pushLine("for (var i = 0, %s = Object.keys(%s); i < %s.length; i ++) {", KEYS, NAMESPACE, KEYS).addIndent()
                 .pushLine("var %s = %s[i];", KEY, KEYS)
-                .pushLine("if (%s[%s]['%s'] && Object.keys(%s[%s]['%s']).every(function(k) { return Number(k); })) {", NAMESPACE, KEY, TYPE_PLACEHOLDER, NAMESPACE, KEY, TYPE_PLACEHOLDER).addIndent()
+                // handle message
+                .pushLine("if (%s[%s]['%s'] && Object.keys(%s[%s]['%s']).every(function(k) { return Number(k); })) {", NAMESPACE, KEY, MESSAGE_PLACEHOLDER, NAMESPACE, KEY, MESSAGE_PLACEHOLDER).addIndent()
                     // protobuf.type. create classes to namespace
                     .pushLine("// protobuf.type")
                     .pushLine("if (%s[%s]) throw Error('field ' + path + '.' + key + ' has already existed');", PARENT, KEY)
-                    .pushLine("%s[%s] = function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
+                    .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
                         // constructor
                         config.comments && codeGen.pushComments([
                             "Constructor function wrapper for the all protobuf type.",
@@ -356,13 +365,13 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                                 .pushLine("if (%s[1].charAt(0) === '{') {", FIELD_PAYLOAD).addIndent()
                                     .pushLine("this[%s[0]] = {};", FIELD_PAYLOAD).subIndent()
                                 .pushLine("} else if (%s[1].charAt(0) === '[' || %s[1].charAt(0) === '<') {", FIELD_PAYLOAD, FIELD_PAYLOAD).addIndent()
-                                    .pushLine("this[%s[0]] = [];", FIELD_PAYLOAD)
+                                    .pushLine("this[%s[0]] = [];", FIELD_PAYLOAD).subIndent()
                                 .pushLine("}").subIndent()
                             .pushLine("}")
                             .pushLine("if (%s) {", PROPERTIES).addIndent()
                                 // omit undefined or null properties
                                 .pushLine("for (var %s = Object.keys(%s), i = 0; i < %s.length; ++i) {", KEYS, PROPERTIES, KEYS).addIndent()
-                                    .pushLine("%s[%s[i]] != null && (this[%s[i]] = %s[%s[i]]);", PROPERTIES, KEYS, KEYS, PROPERTIES, KEYS).subIndent().subIndent()
+                                    .pushLine("%s[%s[i]] != null && (this[%s[i]] = %s[%s[i]]);", PROPERTIES, KEYS, KEYS, PROPERTIES, KEYS).subIndent()
                                 .pushLine("}").subIndent()
                             .pushLine("}").subIndent()
                         .pushLine("}")
@@ -380,7 +389,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                                 .pushLine("// collect all map fields")
                                 .pushLine("// { key: value } => { '1': [ '$1', <key>, null ], '2': [ '$2', <value>, null ] }")
                                 .pushLine("$%s[%s] = {", NAMESPACE, TYPE).addIndent()
-                                    .pushLine("'%s': %s.substring(1).split(',')", TYPE_PLACEHOLDER, TYPE).addIndent()
+                                    .pushLine("'%s': %s.substring(1).split(',')", MESSAGE_PLACEHOLDER, TYPE).addIndent()
                                         .pushLine(".map(function(t, i) { return ['$' + (i + 1), t, null] })")
                                         .pushLine(".reduce(function(m, o, i) { m[i + 1] = o; return m; }, {})").subIndent().subIndent()
                                 .pushLine("};").subIndent()
@@ -394,7 +403,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                                 .pushLine("} else {").addIndent()
                                     .pushLine("%s.prototype[%s[0]] = %s[2];", CLASS_NAME, FIELD_PAYLOAD, FIELD_PAYLOAD).subIndent()
                                 .pushLine("}").subIndent()
-                            .pushLine("}").subIndent()    
+                            .pushLine("}").subIndent()
                         .pushLine("}")
                         .pushLine();
                     
@@ -409,7 +418,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                         ]);
                         codeGen
                         .pushLine("%s.create = function(%s) {", CLASS_NAME, PROPERTIES).addIndent()
-                            .pushLine("return new %s[%s](%s);", PARENT, KEY, PROPERTIES).subIndent()
+                            .pushLine("return new %s(%s);", CLASS_NAME, PROPERTIES).subIndent()
                         .pushLine("};")
                         .pushLine();
                     }
@@ -430,7 +439,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                         .pushLine("%s.decode = function(%s, %s) {", CLASS_NAME, READER, LENGTH).addIndent()
                             .pushLine("if (!(%s instanceof %s.Reader)) %s = %s.Reader.create(%s);", READER, PROTOBUF, READER, PROTOBUF, READER)
                             .pushLine("var %s = %s === undefined ? %s.len : %s.pos + %s;", END_POS, LENGTH, READER, READER, LENGTH)
-                            .pushLine("var %s = new %s[%s]();", MESSAGE, PARENT, KEY)
+                            .pushLine("var %s = new %s();", MESSAGE, CLASS_NAME)
                             .pushLine("while (%s.pos < %s) {", READER, END_POS).addIndent()
                                 .pushLine("var %s = %s.uint32();", TAG, READER)
                                 .pushLine("var %s = %s >>> 3;", FIELD_ID, TAG)
@@ -581,7 +590,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                         ]);
                         codeGen.pushLine("%s.fromObject = function(%s) {", CLASS_NAME, OBJECT).addIndent()
                             .pushLine("if (%s instanceof %s[%s]) return %s;", OBJECT, PARENT, KEY, OBJECT)
-                            .pushLine("var %s = new %s[%s]();", MESSAGE, PARENT, KEY)
+                            .pushLine("var %s = new %s();", MESSAGE, CLASS_NAME)
                             .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
                                 .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
                                 .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
@@ -662,7 +671,6 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                                     .pushLine("}").subIndent()
                                 .pushLine("} else {").addIndent()
                                     .pushLine("// non-repeated field")
-                                    .pushLine("// TODO support for Enum type")
                                     .pushLine("if (%s.defaults) {", OPTIONS).addIndent()
                                         .pushLine("%s[%s] = %s['%s'].call(null, %s[%s][2], %s, %s);", OBJECT, FIELD, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, FIELD_PAYLOADS, FIELD_ID, TYPE, OPTIONS).subIndent()
                                     .pushLine("}")
@@ -722,7 +730,7 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                                         .pushLine("return %s({ %s: %s, %s: true }, 'array')", INVALID, NAME, FIELD_NAME, REPEATED).subIndent()
                                     .pushLine("}")
                                     .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
-                                        .pushLine("var error = %s['%s'](%s, %s[i], { %s: %s + '['+i+']' , %s: true });", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED, NAME, FIELD_NAME, REPEATED)
+                                        .pushLine("var error = %s['%s'](%s, %s[i], { %s: %s + '[' + i + ']', %s: true });", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED, NAME, FIELD_NAME, REPEATED)
                                         .pushLine("if (error) return error;").subIndent()
                                     .pushLine("}").subIndent()
                                 .pushLine("} else {").addIndent()
@@ -739,52 +747,110 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                         .pushLine();
                     }
 
+                    codeGen
+                        // for map fields there's a namespace implicitly created under current class,
+                        // so that we could easily parse it exclusively from decoder
+                        .pushLine("// create inner namespace for each map field")
+                        .pushLine("if (Object.keys($%s).length) {", NAMESPACE).addIndent()
+                            .pushLine("%s.$%s = _($%s, %s + '.' + %s, %s.$%s || {}, true);", CLASS_NAME, NAMESPACE, NAMESPACE, PATH, KEY, CLASS_NAME, NAMESPACE).subIndent()
+                        .pushLine("}")
+                        .pushLine()
+                        // return constructor
+                        .pushLine("return %s;", CLASS_NAME).subIndent()
+                        // passing module[key], key to create class
+                    .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, MESSAGE_PLACEHOLDER, KEY).subIndent();
+
+                // handle service
                 codeGen
-                    // for map fields there's a namespace implicitly created under current class,
-                    // so that we could easily parse it exclusively from decoder
-                    .pushLine("// create inner namespace for each map field")
-                    .pushLine("if (Object.keys($%s).length) {", NAMESPACE).addIndent()
-                        .pushLine("%s.$%s = _($%s, %s + '.' + %s, %s.$%s || {}, true);", CLASS_NAME, NAMESPACE, NAMESPACE, PATH, KEY, CLASS_NAME, NAMESPACE).subIndent()
-                    .pushLine("}")
-                    .pushLine()
-                    // return constructor
-                    .pushLine("return %s;", CLASS_NAME).subIndent()
+                .pushLine("} else if (%s[%s]['%s']) {", NAMESPACE, KEY, SERVICE_PLACEHOLDER).addIndent()
+                    .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
+                        // constructor
+                        config.comments && codeGen.pushComments([
+                            "* Constructs a new service.",
+                            `* @extends ${PROTOBUF}.rpc.Service`,
+                            "* @constructor",
+                            `* @param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
+                            "* @param {boolean} [requestDelimited=false] Whether requests are length-delimited",
+                            "* @param {boolean} [responseDelimited=false] Whether responses are length-delimited"
+                        ]);
+                        codeGen
+                        .pushLine('function %s(%s, requestDelimited, responseDelimited) {', CLASS_NAME, RPC_IMPL).addIndent()
+                            .pushLine('%s.rpc.Service.call(this, %s, requestDelimited, responseDelimited);', PROTOBUF, RPC_IMPL).subIndent()
+                        .pushLine('}')
+                        .pushLine()
+                        .pushLine('(%s.prototype = Object.create(%s.rpc.Service.prototype)).constructor = %s;', CLASS_NAME, PROTOBUF, CLASS_NAME)
+                        .pushLine()
+
+                    if (config.create) {
+                        // create
+                        config.comments && codeGen.pushComments([
+                            "Creates new service using the specified rpc implementation.",
+                            "@function create",
+                            "@static",
+                            `@param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
+                            "@param {boolean} [requestDelimited=false] Whether requests are length-delimited",
+                            "@param {boolean} [responseDelimited=false] Whether responses are length-delimited",
+                            "@returns RPC service. Useful where requests and/or responses are streamed."
+                        ]);
+                        codeGen
+                        .pushLine("%s.create = function(%s, requestDelimited, responseDelimited) {", CLASS_NAME, RPC_IMPL).addIndent()
+                            .pushLine("return new %s(%s, requestDelimited, responseDelimited);", CLASS_NAME, RPC_IMPL).subIndent()
+                        .pushLine("};")
+                        .pushLine();
+                    }
+
+                    // setup rpc methods
+                    codeGen
+                        .pushLine("// setup RPC methods")
+                        .pushLine("for (var %s in %s) {", RPC_METHOD, FIELD_PAYLOADS).addIndent()
+                            .pushLine("var rpc = function(request, callback) {").addIndent()
+                                .pushLine("return this.rpcCall(rpc, %s[%s[%s][0]], %s[%s[%s][1]], request, callback);", ROOT, FIELD_PAYLOADS, RPC_METHOD, ROOT, FIELD_PAYLOADS, RPC_METHOD).subIndent()
+                            .pushLine("};")
+                            .pushLine("Object.defineProperty(%s.prototype[%s] = rpc, 'name', { value: %s });", CLASS_NAME, RPC_METHOD, RPC_METHOD).subIndent()
+                        .pushLine("}")
+                        .pushLine()
+
+                        // return constructor
+                        .pushLine("return %s;", CLASS_NAME).subIndent()
                     // passing module[key], key to create class
-                .pushLine("}(%s[%s]['%s'], %s);", NAMESPACE, KEY, TYPE_PLACEHOLDER, KEY)
+                    .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, SERVICE_PLACEHOLDER, KEY).subIndent();
+
+                // handle enum
+                codeGen
+                .pushLine("} else if (%s[%s]['%s'] && Object.values(%s[%s]['%s']).every(function(v) { return Number(v) === v; })) {", NAMESPACE, KEY, ENUM_PLACEHOLDER, NAMESPACE, KEY, ENUM_PLACEHOLDER).addIndent()
+                    .pushLine("// protobuf.enum")
+                    .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent()
+                        .pushLine("var %s = Object.keys(%s);", KEYS, FIELD_PAYLOADS)
+                        .pushLine("var %s = {};", VALUES)
+                        .pushLine("for (var i = 0; i < %s.length; i ++) {", KEYS).addIndent()
+                            .pushLine("%s[%s[%s[i]] = %s[%s[i]]] = %s[i];", VALUES, VALUES, KEYS, FIELD_PAYLOADS, KEYS, KEYS).subIndent()
+                        .pushLine("}");
+                    if (config.verify) {
+                        codeGen
+                        .pushLine("var vals = {};")
+                        .pushLine("%s.forEach(function (i) { vals[%s[i]] = 1; });", KEYS, VALUES)
+                        .pushLine("%s.%s = vals;", VALUES, RESOLVED_TYPE);
+                    }
+
+                 codeGen.pushLine("return %s;", VALUES).subIndent()
+                    .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, ENUM_PLACEHOLDER, KEY).subIndent()
+                .pushLine("}")
                 .pushLine()
                 // exposing 'A.B.C' like string literal index path to ROOT
                 // helping encode/decode functions to index with all others pbtype
                 .pushLine("// exposing non-inner type to %s", ROOT)
-                .pushLine("!%s && (%s[%s + '.' + %s] = %s[%s]);", IS_INNER, ROOT, PATH, KEY, PARENT, KEY).subIndent()
-            .pushLine("} else if (%s[%s]['%s'] && Object.values(%s[%s]['%s']).every(function(v) { return Number(v) === v; })) {", NAMESPACE, KEY, ENUM_PLACEHOLDER, NAMESPACE, KEY, ENUM_PLACEHOLDER).addIndent()
-                .pushLine("// protobuf.enum")
-                .pushLine("%s[%s] = function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent()
-                    .pushLine("var %s = Object.keys(%s);", KEYS, FIELD_PAYLOADS)
-                    .pushLine("var %s = {};", VALUES)
-                    .pushLine("for (var i = 0; i < %s.length; i ++) {", KEYS).addIndent()
-                        .pushLine("%s[%s[%s[i]] = %s[%s[i]]] = %s[i];", VALUES, VALUES, KEYS, FIELD_PAYLOADS, KEYS, KEYS).subIndent()
-                    .pushLine("}");
-                if (config.verify) {
-                    codeGen
-                    .pushLine("var vals = {};")
-                    .pushLine("%s.forEach(function (i) { vals[%s[i]] = 1; });", KEYS, VALUES)
-                    .pushLine("%s.%s = vals;", VALUES, RESOLVED_TYPE)
-                }
-
-             codeGen.pushLine("return %s;", VALUES).subIndent()
-                .pushLine("}(%s[%s]['%s'], %s);", NAMESPACE, KEY, ENUM_PLACEHOLDER, KEY)
-                .pushLine("// exposing non-inner enum to %s", ROOT)
-                .pushLine("!%s && (%s[%s + '.' + %s] = %s[%s]);", IS_INNER, ROOT, PATH, KEY, PARENT, KEY).subIndent()
+                .pushLine("%s[%s] && !%s && (%s[%s + '.' + %s] = %s[%s]);", PARENT, KEY, IS_INNER, ROOT, PATH, KEY, PARENT, KEY)//.subIndent()
+                .pushLine()
+                // delete parsed type and enum
+                .pushLine("// delete parsed types")
+                .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, MESSAGE_PLACEHOLDER)
+                .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, SERVICE_PLACEHOLDER)
+                .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, ENUM_PLACEHOLDER)
+                // passing module, path, root to create namespace
+                .pushLine("%s[%s] = _(%s[%s], %s ? %s + '.' + %s : %s, %s[%s] || {});", PARENT, KEY, NAMESPACE, KEY, PATH, PATH, KEY, KEY, PARENT, KEY).subIndent()
             .pushLine("}")
-            // delete parsed type and enum
-            .pushLine("// delete parsed type and enum")
-            .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, TYPE_PLACEHOLDER)
-            .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, ENUM_PLACEHOLDER)
-            // passing module, path, root to create namespace
-            .pushLine("%s[%s] = _(%s[%s], %s ? %s + '.' + %s : %s, %s[%s] || {});", PARENT, KEY, NAMESPACE, KEY, PATH, PATH, KEY, KEY, PARENT, KEY).subIndent()
-        .pushLine("}")
-        .pushLine("return %s;", PARENT).subIndent()
-    .pushLine("})({").addIndent();
+            .pushLine("return %s;", PARENT).subIndent()
+        .pushLine("})({").addIndent();
     
     // passing namespaces map as params
     root.resolveAll();
@@ -792,10 +858,10 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
     
     // closing brackets
     codeGen.subIndent()
-    .pushLine("}, '', %s, false);", ROOT)
-    .pushLine()
-    .pushLine("// exposing '%s' to global/window", root.name)
-    .pushLine("%s.util.global['%s'] = %s['%s'];", PROTOBUF, root.name, ROOT, root.name);
+        .pushLine("}, '', %s, false);", ROOT)
+        .pushLine()
+        .pushLine("// exposing '%s' to global/window", root.name)
+        .pushLine("%s.util.global['%s'] = %s['%s'];", PROTOBUF, root.name, ROOT, root.name);
 
     callback(null, codeGen.toString());
 }
@@ -808,12 +874,17 @@ function writeNamespace(codeGen: SimpleCodeGen, ns: protobuf.NamespaceBase, isLa
     // sort before iteration to avoid meanless modification to VCS
     ns.nestedArray.sort((a, b) => a.name.localeCompare(b.name));
     ns.nestedArray.forEach((nested, index, arr) => {
+        const isLastOne = index === arr.length - 1;
         if (nested instanceof protobuf.Type) {
-            writeType(codeGen, nested, index === arr.length - 1);
+            writeType(codeGen, nested, isLastOne);
+        } else if (nested instanceof protobuf.Service) {
+            writeService(codeGen, nested, isLastOne);
         } else if (nested instanceof protobuf.Enum) {
-            writeEnum(codeGen, nested, index === arr.length - 1);
+            writeEnum(codeGen, nested, isLastOne);
         } else if (nested instanceof protobuf.Namespace) {
-            writeNamespace(codeGen, nested, index === arr.length - 1);
+            writeNamespace(codeGen, nested, isLastOne);
+        } else {
+            console.warn(`nested type ${nested.fullName} is not support yet.`);
         }
     });
     codeGen.subIndent().pushLine("}%s", isLastOne ? '' : ',');
@@ -821,60 +892,86 @@ function writeNamespace(codeGen: SimpleCodeGen, ns: protobuf.NamespaceBase, isLa
 
 function writeType(codeGen: SimpleCodeGen, type: protobuf.Type, isLastOne: boolean) {
     let props: any = {};
-    let maxFieldId = Math.max(...Object.keys(type.fieldsById).map(Number));
-    // 1-based field id. ignore absent fields.
-    for (var id = 1; id <= maxFieldId; id ++) {
-        let field = type.fieldsById[id];            
-        if (field) {
-            let fieldAttr: any[] = [];
-            fieldAttr.push(field.name);
-            let fieldType = field.resolvedType ? field.resolvedType.fullName : field.type;
-            if (field.map) {
-                // map field is marked by a heading '{',
-                // follows with the comma delimited keyType and valueType
-                let mapField: protobuf.MapField = <any>field;
-                fieldAttr.push(`{${mapField.keyType},${fieldType}`);
-                // map field's default value set to null here
-                fieldAttr.push(null);
-            } else if (field.repeated) {
-                // repeated field is marked by a heading '[', or '<' if packed
-                fieldAttr.push(`${field.packed ? '<' : '['}${fieldType}`);
-                // repeated field's default value set to null here
-                fieldAttr.push(null);
-            } else {
-                fieldAttr.push(fieldType);
-                if (NUMBERIC64_ARR.includes(fieldType)) {
-                    // 64bit numberic
-                    if (config.forceLong) {
-                        // resolve again as long
-                        field.long = true;
-                    } else if (config.forceNumber) {
-                        // resolve again as non-long
-                        field.long = false;
-                    }
-                    field.resolved = false;
-                    field.resolve();
+    // 1-based field id
+    let fieldIds = Object.keys(type.fieldsById).map(id => parseInt(id));
+    for (let id of fieldIds) {
+        let field = type.fieldsById[id];
+        let fieldAttr: any[] = [];
+        fieldAttr.push(field.name);
+        let fieldType = field.resolvedType ? field.resolvedType.fullName : field.type;
+        if (field.map) {
+            // map field is marked by a heading '{',
+            // follows with the comma delimited keyType and valueType
+            let mapField: protobuf.MapField = <any>field;
+            fieldAttr.push(`{${mapField.keyType},${fieldType}`);
+            // map field's default value set to null here
+            fieldAttr.push(null);
+        } else if (field.repeated) {
+            // repeated field is marked by a heading '[', or '<' if packed
+            fieldAttr.push(`${field.packed ? '<' : '['}${fieldType}`);
+            // repeated field's default value set to null here
+            fieldAttr.push(null);
+        } else {
+            fieldAttr.push(fieldType);
+            if (NUMBERIC64_ARR.includes(fieldType)) {
+                // 64bit numberic
+                if (config.forceLong) {
+                    // resolve again as long
+                    field.long = true;
+                } else if (config.forceNumber) {
+                    // resolve again as non-long
+                    field.long = false;
                 }
-                fieldAttr.push(field.defaultValue);
+                field.resolved = false;
+                field.resolve();
             }
-            props[id] = fieldAttr;
+            fieldAttr.push(field.defaultValue);
         }
+        props[id] = fieldAttr;
     }
     codeGen.pushLine("%s: {", type.name).addIndent()
-        .pushLine("'%s': %j%s", TYPE_PLACEHOLDER, props, type.nestedArray.length > 0 ? ',' : '');
+        .pushLine("'%s': %j%s", MESSAGE_PLACEHOLDER, props, type.nestedArray.length > 0 ? ',' : '');
 
     if (type.nestedArray.length) {
         // sort before iteration to avoid meanless modification to VCS
         type.nestedArray.sort((a, b) => a.name.localeCompare(b.name));
         type.nestedArray.forEach((nested, index, arr) => {
+            const isLastOne = index === arr.length - 1;
             if (nested instanceof protobuf.Type) {
-                writeType(codeGen, nested, index === arr.length - 1);
+                writeType(codeGen, nested, isLastOne);
             } else if (nested instanceof protobuf.Enum) {
-                writeEnum(codeGen, nested, index === arr.length - 1);
+                writeEnum(codeGen, nested, isLastOne);
+            } else {
+                console.warn(`nested type ${nested.fullName} is not support yet.`);
             }
         });
     }
     codeGen.subIndent().pushLine("}%s", isLastOne ? '' : ',');
+}
+
+function writeService(codeGen: SimpleCodeGen, type: protobuf.Service, isLastOne: boolean) {
+    let props: any = {};
+    for (let method of Object.values(type.methods)) {
+        if (method.type === 'rpc') {
+            // resolve first
+            method.resolve();
+            if (!method.resolvedRequestType) {
+                console.error(`unable to resolve request type "${method.requestType}"`);
+                continue;
+            }
+            if (!method.resolvedResponseType) {
+                console.error(`unable to resolve response type "${method.responseType}"`);
+                continue;
+            }
+            props[method.name] = [ method.resolvedRequestType.fullName, method.resolvedResponseType.fullName ];
+        } else {
+            console.warn(`method ${type.fullName}.${method.name} of type ${method.type} not support yet.`);
+        }
+    }
+    codeGen
+        .pushLine("%s: {", type.name).addIndent()
+            .pushLine("'%s': %j", SERVICE_PLACEHOLDER, props).subIndent()
+        .pushLine("}%s", isLastOne ? '' : ',');
 }
 
 function writeEnum(codeGen: SimpleCodeGen, type: protobuf.Enum, isLastOne: boolean) {

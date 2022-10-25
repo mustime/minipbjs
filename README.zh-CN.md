@@ -4,6 +4,23 @@
 
 **minipbjs**是一个基于[protobuf.js](https://github.com/protobufjs/protobuf.js)下命令行工具`pbjs`的扩展，目的在于大大减少其生成的Javascript胶水代码大小，兼容`Node.js`、浏览器和各类微信小程序（游戏）等。对于小程序（游戏）等对代码包大小有严格要求的场景尤其适用。
 
+`minipbjs` 当前支持：
+
+* [x] `message`
+  * constructor
+  * create
+  * encode / encodeDelimited
+  * decode / decodeDelimited
+  * verify
+  * fromObject
+  * toObject
+  * toJSON
+* [x] `service`
+  * constructor
+  * create
+* [x] `enum`
+* [ ] `oneof` （欢迎PR！🎉）
+
 ## 安装使用
 
 ### 安装

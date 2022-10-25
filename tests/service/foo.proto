@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package foo;
+
+message FooReq {
+    uint32 id = 1;
+    sfixed64 payload = 2;
+}
+
+message FooRes {
+    uint32 id = 1;
+    FooReq req = 2;
+}
+
+service Foo {
+    rpc bar(FooReq) returns (FooRes) {};
+}
