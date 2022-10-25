@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2021, Irvin Pang <halo.irvin@gmail.com>
+ * Copyright (c) 2021-2022, Irvin Pang <halo.irvin@gmail.com>
  * All rights reserved.
  * 
  * licensed under the MIT License
  */
 
-export class SimpleCodeGen {
+export default class SimpleCodeGen {
     private _lines: string[];
     private _indentCount: number;
     private _indentStyle: string;

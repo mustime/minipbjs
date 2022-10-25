@@ -1,494 +1,428 @@
 /*
- * Copyright (c) 2021, Irvin Pang <halo.irvin@gmail.com>
+ * Copyright (c) 2021-2022, Irvin Pang <halo.irvin@gmail.com>
  * All rights reserved.
  * 
  * licensed under the MIT License
  */
 
 import protobuf from 'protobufjs';
-import { VERSION_STR } from './version';
-import { SimpleCodeGen } from './codegen';
+import IOptions from './options';
+import SimpleCodeGen from './codegen';
+import RootVisitor from './root-visitor';
 
-const pkg: any = require('../package.json');
-
-interface IOptions {
-    create?: boolean;
-    decode?: boolean;
-    encode?: boolean;
-    delimited?: boolean;
-    verify?: boolean;
-    convert?: boolean;
-    es6?: boolean;
-    root?: string;
-    comments?: boolean;
-    forceLong?: boolean;
-    forceNumber?: boolean;
-    forceMessage?: boolean;
-    forceEnumString?: boolean;
-}
-
-const PROTOBUF          = 'protobuf',
-      ROOT              = '$root',
-      READER_FUNCTIONS  = '$reader',
-      WRITER_FUNCTIONS  = '$writer',
+const PROTOBUF            = 'protobuf',
+      ROOT                = '$root',
+      READER_FUNCTIONS    = '$reader',
+      WRITER_FUNCTIONS    = '$writer',
       VERIFIER_FUNCTIONS  = '$verifier',
-      TYPES_ARRAY       = '$types',
-      WIRES_ARRAY       = '$wires',
-      PACKED_ARRAY      = '$packed',
-      CONVERTER_CREATOR = '$createConverter',
-      MESSAGE_CONVERTER = '$convMessage',
-      OBJECT_CONVERTER  = '$convObject',
-      CONVERTER         = 'converter',
-      CONVERT_FUNCTION  = 'convf',
-      CONFIGS           = 'cfgs',
-      CONFIG            = 'cfg',
-      RETURN_VALUE      = 'ret',
-      VALUE             = 'value',
-      VALUES            = 'values',
-      TYPE_PLACEHOLDER  = '$',
+      TYPES_ARRAY         = '$types',
+      WIRES_ARRAY         = '$wires',
+      PACKED_ARRAY        = '$packed',
+      CONVERTER_CREATOR   = '$createConverter',
+      MESSAGE_CONVERTER   = '$convMessage',
+      OBJECT_CONVERTER    = '$convObject',
+      CONVERTER           = 'converter',
+      CONVERT_FUNCTION    = 'convf',
+      CONFIGS             = 'cfgs',
+      CONFIG              = 'cfg',
+      RETURN_VALUE        = 'ret',
+      VALUE               = 'value',
+      VALUES              = 'values',
+      TYPE_PLACEHOLDER    = '$',
       MESSAGE_PLACEHOLDER = '$m',
       SERVICE_PLACEHOLDER = '$s',
-      ENUM_PLACEHOLDER  = '$e',
-      CLASS_NAME        = 'C',
-      PROPERTIES        = 'props',
-      TYPES             = 'types',
-      TYPE              = 'type',
-      VALUE_TYPE        = 'vtype',
-      NAMESPACE         = 'namespace',
-      PARENT            = 'parent',
-      IS_INNER          = 'inner',
-      KEYS              = 'keys',
-      KEY               = 'key',
-      FIELD_PAYLOADS    = 'payloads',
-      FIELD_PAYLOAD     = 'payload',
-      READER            = 'reader',
-      WRITER            = 'writer',
-      LENGTH            = 'length',
-      END_POS           = 'end',
-      MESSAGE           = 'message',
-      TAG               = 'tag',
-      FIELD             = 'field',
-      FIELD_ID          = 'id',
-      WIRE              = 'wire',
-      FIELD_MAP         = 'map',
-      FIELD_REPEATED    = 'array',
-      PATH              = 'path',
-      IS_PACKED         = 'packed',
-      OBJECT            = 'object',
-      PROPERTY          = 'property',
-      OPTIONS           = 'options',
-      VERIFY_KEY_FUNC   = 'verifyKey',
-      KEY_VERIFY_MAP    = 'keyVerifyMap',
-      INVALID           = 'invalid',
-      NAME              = 'name',
-      REPEATED          = 'repeated',
-      KEY_TYPE          = 'keyType',
-      EXPECTED          = 'expected',
-      FIELD_INFO        = 'fieldInfo',
-      RESOLVED_TYPE     = 'resolvedType',
-      FIELD_NAME        = 'fieldName',
-      INNER_FIELD_NAME  = '$fieldName',
-      RPC_IMPL          = 'rpcImpl',
-      RPC_METHOD        = 'rpcMethod';
+      ENUM_PLACEHOLDER    = '$e',
+      CLASS_NAME          = 'C',
+      PROPERTIES          = 'props',
+      TYPES               = 'types',
+      TYPE                = 'type',
+      VALUE_TYPE          = 'vtype',
+      NAMESPACE           = 'namespace',
+      PARENT              = 'parent',
+      IS_INNER            = 'inner',
+      KEYS                = 'keys',
+      KEY                 = 'key',
+      FIELD_PAYLOADS      = 'payloads',
+      FIELD_PAYLOAD       = 'payload',
+      READER              = 'reader',
+      WRITER              = 'writer',
+      LENGTH              = 'length',
+      END_POS             = 'end',
+      MESSAGE             = 'message',
+      TAG                 = 'tag',
+      FIELD               = 'field',
+      FIELD_ID            = 'id',
+      WIRE                = 'wire',
+      FIELD_MAP           = 'map',
+      FIELD_REPEATED      = 'array',
+      PATH                = 'path',
+      IS_PACKED           = 'packed',
+      OBJECT              = 'object',
+      PROPERTY            = 'property',
+      OPTIONS             = 'options',
+      VERIFY_KEY_FUNC     = 'verifyKey',
+      KEY_VERIFY_MAP      = 'keyVerifyMap',
+      INVALID             = 'invalid',
+      NAME                = 'name',
+      REPEATED            = 'repeated',
+      KEY_TYPE            = 'keyType',
+      EXPECTED            = 'expected',
+      FIELD_INFO          = 'fieldInfo',
+      RESOLVED_TYPE       = 'resolvedType',
+      FIELD_NAME          = 'fieldName',
+      INNER_FIELD_NAME    = '$fieldName',
+      RPC_IMPL            = 'rpcImpl',
+      RPC_METHOD          = 'rpcMethod';
 
-const DEFAULT_ROOT = 'default';
-
+const PACKAGE: any = require('../package.json');
 const NUMBERIC64_ARR = [ 'int64', 'sint64', 'fixed64', 'sfixed64', 'uint64' ];
 
-let config: IOptions;
+class JsWriter extends RootVisitor {
+    protected _config: IOptions;
+    protected _codeGen: SimpleCodeGen;
 
-function static_mini(root: protobuf.Root, options: IOptions, callback: Function): void {
-    config = options;
-    if (config.forceLong && !protobuf.util.Long) {
-        throw new Error(`protobuf.util.Long is not available while '--force-long' option is specified`);
+    public constructor(config: IOptions) {
+        super();
+        this._config = config;
+        this._codeGen = new SimpleCodeGen(4);
     }
-    root.name = root.name || config.root || DEFAULT_ROOT;
-    let codeGen = new SimpleCodeGen(4);
-    // global definition
-    codeGen
-        .pushComments([
-            "DO NOT EDIT",
-            `-- this file is generated by minipbjs v${VERSION_STR}`,
-            `-- reporting issues on ${pkg.bugs.url}`,
-        ])
-        .pushLine()
-        // appending to root namespace from protobuf
-        .pushLine("var %s = %s.roots;", ROOT, PROTOBUF)
-        .pushLine()
-        .pushLine("// type system from %s", PROTOBUF)
-        .pushLine("// notice: minimal build protobuf library does not contains 'types'")
-        .pushLine("var %s = %s.types ? %s.types.basic : { 'double': 1, 'float': 5, 'int32': 0, 'uint32': 0, 'sint32': 0, 'fixed32': 5, 'sfixed32': 5, 'int64': 0, 'uint64': 0, 'sint64': 0, 'fixed64': 1, 'sfixed64': 1, 'bool': 0, 'string': 2, 'bytes': 2 };", WIRES_ARRAY, PROTOBUF, PROTOBUF)
-        .pushLine("var %s = %s.types ? %s.types.packed : { 'double': 1, 'float': 5, 'int32': 0, 'uint32': 0, 'sint32': 0, 'fixed32': 5, 'sfixed32': 5, 'int64': 0, 'uint64': 0, 'sint64': 0, 'fixed64': 1, 'sfixed64': 1, 'bool': 0 };", PACKED_ARRAY, PROTOBUF, PROTOBUF)
-        .pushLine("var %s = Object.keys(%s);", TYPES_ARRAY, WIRES_ARRAY)
-        .pushLine()
 
-        //verifyMap
-        if (config.verify) {
-            codeGen
-                .pushLine("function %s({ %s, %s, %s, %s }, %s) {", INVALID, NAME, REPEATED, FIELD_MAP, KEY_TYPE, EXPECTED).addIndent()
-                    .pushLine("return %s + ': ' + %s + (%s && %s !== '%s' ? '[]' : %s && %s !== '%s' ? '{k:'+%s+'}' : '') + ' %s';", NAME, EXPECTED, REPEATED, EXPECTED, FIELD_REPEATED, FIELD_MAP, EXPECTED, OBJECT, KEY_TYPE, EXPECTED).subIndent()
-                .pushLine("}")
-                .pushLine("var %s = { int32: 'key32Re', uint32: 'key32Re', sint32: 'key32Re', fixed32: 'key32Re', sfixed32: 'key32Re', int64: 'key64Re', uint64: 'key64Re', sint64: 'key64Re', fixed64: 'key64Re', sfixed64: 'key64Re', bool: 'key2Re' };", KEY_VERIFY_MAP)
-                .pushLine("function %s(%s, %s, %s) {", VERIFY_KEY_FUNC, TYPE, MESSAGE, FIELD_INFO).addIndent()
-                    .pushLine("if (%s[%s]) {", KEY_VERIFY_MAP, TYPE).addIndent()
-                        .pushLine("if (!%s.util[%s[%s]].test(%s)) {", PROTOBUF, KEY_VERIFY_MAP, TYPE, MESSAGE).addIndent()
-                            .pushLine("%s.%s = %s;", FIELD_INFO, KEY_TYPE, TYPE)
-                            .pushLine("return %s(%s, '%s')", INVALID, FIELD_INFO, KEY).subIndent()
-                        .pushLine("}")
-                        .pushLine("return null;").subIndent()
+    public dump(): string {
+        return this._codeGen.toString();
+    }
+
+    protected _onEnterRoot(root: protobuf.Root): void {
+        // global definition
+        this._codeGen
+            .pushComments([
+                "DO NOT EDIT",
+                `-- this file is generated by ${PACKAGE.name} v${PACKAGE.version}`,
+                `-- reporting issues on ${PACKAGE.bugs.url}`,
+            ])
+            .pushLine()
+            .pushComments([
+                "change the following require statement by option [--library <path>].",
+                "<path> could be one of the protobufjs' distribution types: 'full'(default), 'light', or 'minimal'.",
+                "besides, it could be the specified location of any 'protobuf-library.js' you wanna be."
+            ])
+            .pushLine("require('%s');", (<any>global)['$minipbjs_libpath'])
+            .pushLine()
+            // appending to root namespace from protobuf
+            .pushLine("var %s = %s.roots;", ROOT, PROTOBUF)
+            .pushLine()
+            .pushLine("// type system from %s", PROTOBUF)
+            .pushLine("// notice: minimal build protobuf library does not contains 'types'")
+            .pushLine("var %s = %s.types ? %s.types.basic : { 'double': 1, 'float': 5, 'int32': 0, 'uint32': 0, 'sint32': 0, 'fixed32': 5, 'sfixed32': 5, 'int64': 0, 'uint64': 0, 'sint64': 0, 'fixed64': 1, 'sfixed64': 1, 'bool': 0, 'string': 2, 'bytes': 2 };", WIRES_ARRAY, PROTOBUF, PROTOBUF)
+            .pushLine("var %s = %s.types ? %s.types.packed : { 'double': 1, 'float': 5, 'int32': 0, 'uint32': 0, 'sint32': 0, 'fixed32': 5, 'sfixed32': 5, 'int64': 0, 'uint64': 0, 'sint64': 0, 'fixed64': 1, 'sfixed64': 1, 'bool': 0 };", PACKED_ARRAY, PROTOBUF, PROTOBUF)
+            .pushLine("var %s = Object.keys(%s);", TYPES_ARRAY, WIRES_ARRAY)
+            .pushLine()
+
+            // verifyMap
+            if (this._config.verify) {
+                this._codeGen
+                    .pushLine("function %s({ %s, %s, %s, %s }, %s) {", INVALID, NAME, REPEATED, FIELD_MAP, KEY_TYPE, EXPECTED).addIndent()
+                        .pushLine("return %s + ': ' + %s + (%s && %s !== '%s' ? '[]' : %s && %s !== '%s' ? '{k:'+%s+'}' : '') + ' %s';", NAME, EXPECTED, REPEATED, EXPECTED, FIELD_REPEATED, FIELD_MAP, EXPECTED, OBJECT, KEY_TYPE, EXPECTED).subIndent()
                     .pushLine("}")
-                    .pushLine("return null;").subIndent()
-                .pushLine("};")
-                .pushLine("var type32Map = { int32: 1, uint32: 1, sint32: 1, fixed32: 1, sfixed32: 1 };")
-                .pushLine("var type64Map = { int64: 1, uint64: 1, sint64: 1, fixed64: 1, sfixed64: 1 };")
-                .pushLine("var floatOrDoubleMap = { float: 1, double: 1 };")
-                .pushLine("var util = %s.util;", PROTOBUF)
-                .pushLine()
-                .pushLine("var %s = {", VERIFIER_FUNCTIONS).addIndent()
-                    .pushLine("'%s': function(%s, %s, %s, %s) {", TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD_INFO, FIELD).addIndent()
-                        .pushLine("if (%s === '$1') {", FIELD).addIndent()
-                            .pushLine("%s.%s = true;", FIELD_INFO, FIELD_MAP)
-                            .pushLine("return %s(%s, %s, %s);", VERIFY_KEY_FUNC, TYPE, MESSAGE, FIELD_INFO).subIndent()
-                        .pushLine("}")
-                        .pushLine("// basic type")
-                        .pushLine("if (%s[%s] !== undefined) {", WIRES_ARRAY, TYPE).addIndent()
-                            .pushLine("if (type32Map[%s]) {", TYPE).addIndent()
-                                .pushLine("if (typeof %s !== 'number') return %s(%s, 'number');", MESSAGE, INVALID, FIELD_INFO).subIndent()
-                            .pushLine("} else if (type64Map[%s]) {", TYPE).addIndent()
-                                .pushLine("if (!util.isInteger(%s) && !(%s && util.isInteger(%s.low) && util.isInteger(%s.high))) {", MESSAGE, MESSAGE, MESSAGE, MESSAGE).addIndent()
-                                    .pushLine("return %s(%s, 'integer|Long');", INVALID, FIELD_INFO).subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("} else if (floatOrDoubleMap[%s]) {", TYPE).addIndent()
-                                .pushLine("if (typeof %s !== 'number') return %s(%s, 'float|double');", MESSAGE, INVALID, FIELD_INFO).subIndent()
-                            .pushLine("} else if (%s === 'bool') {", TYPE).addIndent()
-                                .pushLine("if (typeof %s !== 'boolean') return %s(%s, 'boolean');", MESSAGE, INVALID, FIELD_INFO).subIndent()
-                            .pushLine("} else if (%s === 'string') {", TYPE).addIndent()
-                                .pushLine("if (!util.isString(%s)) return %s(%s, 'string');", MESSAGE, INVALID, FIELD_INFO).subIndent()
-                            .pushLine("} else if (%s === 'bytes') {", TYPE).addIndent()
-                                .pushLine("if(!(%s && typeof %s.length ==='number' || util.isString(%s))) {", MESSAGE, MESSAGE, MESSAGE).addIndent()
-                                    .pushLine("return %s(%s, 'invalid bytes');", INVALID, FIELD_INFO).subIndent()
-                                .pushLine("}").subIndent()
+                    .pushLine("var %s = { int32: 'key32Re', uint32: 'key32Re', sint32: 'key32Re', fixed32: 'key32Re', sfixed32: 'key32Re', int64: 'key64Re', uint64: 'key64Re', sint64: 'key64Re', fixed64: 'key64Re', sfixed64: 'key64Re', bool: 'key2Re' };", KEY_VERIFY_MAP)
+                    .pushLine("function %s(%s, %s, %s) {", VERIFY_KEY_FUNC, TYPE, MESSAGE, FIELD_INFO).addIndent()
+                        .pushLine("if (%s[%s]) {", KEY_VERIFY_MAP, TYPE).addIndent()
+                            .pushLine("if (!%s.util[%s[%s]].test(%s)) {", PROTOBUF, KEY_VERIFY_MAP, TYPE, MESSAGE).addIndent()
+                                .pushLine("%s.%s = %s;", FIELD_INFO, KEY_TYPE, TYPE)
+                                .pushLine("return %s(%s, '%s')", INVALID, FIELD_INFO, KEY).subIndent()
                             .pushLine("}")
                             .pushLine("return null;").subIndent()
                         .pushLine("}")
-                        .pushLine("if (%s[%s].%s) return %s[%s].%s[%s] ? null : %s(%s, 'enum value');", ROOT, TYPE, RESOLVED_TYPE, ROOT, TYPE, RESOLVED_TYPE, MESSAGE, INVALID, FIELD_INFO)
-                        .pushLine("return %s[%s].verify(%s);", ROOT, TYPE, MESSAGE).subIndent()
-                    .pushLine("}").subIndent()
-                .pushLine("};")
-        }
+                        .pushLine("return null;").subIndent()
+                    .pushLine("};")
+                    .pushLine("var type32Map = { int32: 1, uint32: 1, sint32: 1, fixed32: 1, sfixed32: 1 };")
+                    .pushLine("var type64Map = { int64: 1, uint64: 1, sint64: 1, fixed64: 1, sfixed64: 1 };")
+                    .pushLine("var floatOrDoubleMap = { float: 1, double: 1 };")
+                    .pushLine("var util = %s.util;", PROTOBUF)
+                    .pushLine()
+                    .pushLine("var %s = {", VERIFIER_FUNCTIONS).addIndent()
+                        .pushLine("'%s': function(%s, %s, %s, %s) {", TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD_INFO, FIELD).addIndent()
+                            .pushLine("if (%s === '$1') {", FIELD).addIndent()
+                                .pushLine("%s.%s = true;", FIELD_INFO, FIELD_MAP)
+                                .pushLine("return %s(%s, %s, %s);", VERIFY_KEY_FUNC, TYPE, MESSAGE, FIELD_INFO).subIndent()
+                            .pushLine("}")
+                            .pushLine("// basic type")
+                            .pushLine("if (%s[%s] !== undefined) {", WIRES_ARRAY, TYPE).addIndent()
+                                .pushLine("if (type32Map[%s]) {", TYPE).addIndent()
+                                    .pushLine("if (typeof %s !== 'number') return %s(%s, 'number');", MESSAGE, INVALID, FIELD_INFO).subIndent()
+                                .pushLine("} else if (type64Map[%s]) {", TYPE).addIndent()
+                                    .pushLine("if (!util.isInteger(%s) && !(%s && util.isInteger(%s.low) && util.isInteger(%s.high))) {", MESSAGE, MESSAGE, MESSAGE, MESSAGE).addIndent()
+                                        .pushLine("return %s(%s, 'integer|Long');", INVALID, FIELD_INFO).subIndent()
+                                    .pushLine("}").subIndent()
+                                .pushLine("} else if (floatOrDoubleMap[%s]) {", TYPE).addIndent()
+                                    .pushLine("if (typeof %s !== 'number') return %s(%s, 'float|double');", MESSAGE, INVALID, FIELD_INFO).subIndent()
+                                .pushLine("} else if (%s === 'bool') {", TYPE).addIndent()
+                                    .pushLine("if (typeof %s !== 'boolean') return %s(%s, 'boolean');", MESSAGE, INVALID, FIELD_INFO).subIndent()
+                                .pushLine("} else if (%s === 'string') {", TYPE).addIndent()
+                                    .pushLine("if (!util.isString(%s)) return %s(%s, 'string');", MESSAGE, INVALID, FIELD_INFO).subIndent()
+                                .pushLine("} else if (%s === 'bytes') {", TYPE).addIndent()
+                                    .pushLine("if(!(%s && typeof %s.length ==='number' || util.isString(%s))) {", MESSAGE, MESSAGE, MESSAGE).addIndent()
+                                        .pushLine("return %s(%s, 'invalid bytes');", INVALID, FIELD_INFO).subIndent()
+                                    .pushLine("}").subIndent()
+                                .pushLine("}")
+                                .pushLine("return null;").subIndent()
+                            .pushLine("}")
+                            .pushLine("if (%s[%s].%s) return %s[%s].%s[%s] ? null : %s(%s, 'enum value');", ROOT, TYPE, RESOLVED_TYPE, ROOT, TYPE, RESOLVED_TYPE, MESSAGE, INVALID, FIELD_INFO)
+                            .pushLine("return %s[%s].verify(%s);", ROOT, TYPE, MESSAGE).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("};")
+            }
 
-        // wrappers
-        codeGen.pushLine("// wrappers")
-        .pushLine("var %s = {", READER_FUNCTIONS).addIndent()
-            // reader wrapper for all types
-            .pushLine("'%s': function(%s) {", TYPE_PLACEHOLDER, TYPE).addIndent()
-                .pushLine("if (%s[%s]) {", READER_FUNCTIONS, TYPE).addIndent()
-                    .pushLine("return %s[%s].call(this);", READER_FUNCTIONS, TYPE).subIndent()
-                .pushLine("}")
-                .pushLine("return %s[%s].decode(this, this.uint32());", ROOT, TYPE).subIndent()
-            .pushLine("}").subIndent()
-        .pushLine("}, %s = {", WRITER_FUNCTIONS).addIndent()
-            // writer wrapper for all types
-            .pushLine("'%s': function(%s, %s, %s) {", TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD_ID).addIndent()
-                .pushLine("var %s = %s[%s];", WIRE, WIRES_ARRAY, TYPE)
-                .pushLine("if (%s === undefined) {", WIRE).addIndent()
-                    .pushLine("this.uint32((%s << 3 | 2) >> 0).fork();", FIELD_ID)
-                    .pushLine("return %s[%s].encode(%s, this).ldelim();", ROOT, TYPE, MESSAGE).subIndent()
-                .pushLine("}")
-                .pushLine("return %s[%s].call(this.uint32(%s << 3 | %s), %s);", WRITER_FUNCTIONS, TYPE, FIELD_ID, WIRE, MESSAGE).subIndent()
-            .pushLine("}").subIndent()
-        .pushLine("};")
-        .pushLine()
-        .pushLine("for (var i = 0; i < %s.length; i ++) {", TYPES_ARRAY).addIndent()
-            .pushLine("%s[%s[i]] = %s.Reader.prototype[%s[i]];", READER_FUNCTIONS, TYPES_ARRAY, PROTOBUF, TYPES_ARRAY)
-            .pushLine("%s[%s[i]] = %s.Writer.prototype[%s[i]];", WRITER_FUNCTIONS, TYPES_ARRAY, PROTOBUF, TYPES_ARRAY).subIndent()
-        .pushLine("}")
-        .pushLine();
-        
-        // converter creator
-        if (config.convert) {
-            codeGen
-            .pushLine("function %s(%s) {", CONVERTER_CREATOR, CONFIGS).addIndent()
-                .pushLine("var %s = {};", CONVERTER)
-                .pushLine("for (var i = 0; i < %s.length; i ++) {", CONFIGS).addIndent()
-                    .pushLine("var %s = %s[i];", CONFIG, CONFIGS)
-                    .pushLine("for (var j = 0; j < %s.types.length; j ++) {", CONFIG).addIndent()
-                        .pushLine("%s[%s.types[j]] = %s.%s;", CONVERTER, CONFIG, CONFIG, CONVERT_FUNCTION).subIndent()
-                    .pushLine("}").subIndent()
-                .pushLine("}")
-                .pushLine("return %s;", CONVERTER).subIndent()
-            .pushLine("}")
-            .pushLine()
-            // create converter for object -> message
-            .pushLine("// fromObject")
-            .pushLine("var %s = %s([", OBJECT_CONVERTER, CONVERTER_CREATOR).addIndent()
-                .pushLine("{").addIndent()
-                    .pushLine("'%s': [ 'bool' ],", TYPES)
-                    .pushLine("'%s': Boolean", CONVERT_FUNCTION).subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'string' ],", TYPES)
-                    .pushLine("'%s': String", CONVERT_FUNCTION).subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'float', 'double' ],", TYPES)
-                    .pushLine("'%s': Number", CONVERT_FUNCTION).subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'uint32', 'fixed32' ],", TYPES)
-                    .pushLine("'%s': function(%s) { return %s >>> 0; }", CONVERT_FUNCTION, VALUE, VALUE).subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'int32', 'sint32', 'sfixed32' ],", TYPES)
-                    .pushLine("'%s': function(%s) { return %s | 0; }", CONVERT_FUNCTION, VALUE, VALUE).subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'int64', 'sint64', 'fixed64', 'sfixed64', 'uint64' ],", TYPES)
-                    .pushLine("'%s': function(%s, %s) {", CONVERT_FUNCTION, VALUE, TYPE).addIndent()
-                        .pushLine("var %s = undefined;", RETURN_VALUE)
-                        // FIXME: support for --force-long/--force-number
-                        .pushLine("// FIXME: support for --force-long/--force-number")
-                        .pushLine("if (%s.util.Long) {", PROTOBUF).addIndent()
-                            .pushLine("%s = %s.util.Long.fromValue(%s);", RETURN_VALUE, PROTOBUF, VALUE)
-                            .pushLine("%s.unsigned = %s.charAt(0) === 'u';", RETURN_VALUE, TYPE).subIndent()
-                        .pushLine("} else if (typeof %s === 'object') {", VALUE).addIndent()
-                            .pushLine("%s = new %s.util.LongBits(%s.low >>> 0, %s.high >>> 0).toNumber(%s.charAt(0) === 'u');", RETURN_VALUE, PROTOBUF, VALUE, VALUE, TYPE).subIndent()
-                        .pushLine("} else if (typeof %s === 'string') {", VALUE).addIndent()
-                            .pushLine("%s = parseInt(%s, 10);", RETURN_VALUE, VALUE).subIndent()
-                        .pushLine("} else if (typeof %s === 'number') {", VALUE).addIndent()
-                            .pushLine("%s = %s;", RETURN_VALUE, VALUE).subIndent()
-                        .pushLine("}")
-                        .pushLine("return %s;", RETURN_VALUE).subIndent()
-                    .pushLine("}").subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'bytes' ],", TYPES)
-                    .pushLine("'%s': function(%s, %s) {", CONVERT_FUNCTION, VALUE, TYPE).addIndent()
-                        .pushLine("var %s = undefined;", RETURN_VALUE)
-                        .pushLine("if (typeof %s === 'string') {", VALUE).addIndent()
-                            .pushLine("%s = %s.util.newBuffer(%s.util.base64.length(%s))", RETURN_VALUE, PROTOBUF, PROTOBUF, VALUE)
-                            .pushLine("%s.util.base64.decode(%s, %s, 0);", PROTOBUF, VALUE, RETURN_VALUE).subIndent()
-                        .pushLine("} else if (%s.length) {", VALUE).addIndent()
-                            .pushLine("%s = %s;", RETURN_VALUE, VALUE).subIndent()
-                        .pushLine("}")
-                        .pushLine("return %s;", RETURN_VALUE).subIndent()
-                    .pushLine("}").subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ '%s' ],", TYPES, TYPE_PLACEHOLDER)
-                    .pushLine("'%s': function(%s, %s) {", CONVERT_FUNCTION, VALUE, TYPE).addIndent()
-                        .pushLine("if (%s[%s]) {", OBJECT_CONVERTER, TYPE).addIndent()
-                            .pushLine("return %s[%s].call(null, %s, %s);", OBJECT_CONVERTER, TYPE, VALUE, TYPE).subIndent()
-                        .pushLine("} else if (!%s[%s].fromObject) {", ROOT, TYPE).addIndent()
-                            .pushLine("// enum")
-                            .pushLine("var %s = %s[%s][%s];", RETURN_VALUE, ROOT, TYPE, VALUE)
-                            .pushLine("return typeof %s === 'string' ? %s[%s][%s] : %s;", RETURN_VALUE, ROOT, TYPE, RETURN_VALUE, RETURN_VALUE).subIndent()
-                        .pushLine("}")
-                        .pushLine("return %s[%s].fromObject(%s);", ROOT, TYPE, VALUE).subIndent()
-                    .pushLine("}").subIndent()
+            // wrappers
+            this._codeGen.pushLine("// wrappers")
+            .pushLine("var %s = {", READER_FUNCTIONS).addIndent()
+                // reader wrapper for all types
+                .pushLine("'%s': function(%s) {", TYPE_PLACEHOLDER, TYPE).addIndent()
+                    .pushLine("if (%s[%s]) {", READER_FUNCTIONS, TYPE).addIndent()
+                        .pushLine("return %s[%s].call(this);", READER_FUNCTIONS, TYPE).subIndent()
+                    .pushLine("}")
+                    .pushLine("return %s[%s].decode(this, this.uint32());", ROOT, TYPE).subIndent()
                 .pushLine("}").subIndent()
-            .pushLine("]);")
+            .pushLine("}, %s = {", WRITER_FUNCTIONS).addIndent()
+                // writer wrapper for all types
+                .pushLine("'%s': function(%s, %s, %s) {", TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD_ID).addIndent()
+                    .pushLine("var %s = %s[%s];", WIRE, WIRES_ARRAY, TYPE)
+                    .pushLine("if (%s === undefined) {", WIRE).addIndent()
+                        .pushLine("this.uint32((%s << 3 | 2) >> 0).fork();", FIELD_ID)
+                        .pushLine("return %s[%s].encode(%s, this).ldelim();", ROOT, TYPE, MESSAGE).subIndent()
+                    .pushLine("}")
+                    .pushLine("return %s[%s].call(this.uint32(%s << 3 | %s), %s);", WRITER_FUNCTIONS, TYPE, FIELD_ID, WIRE, MESSAGE).subIndent()
+                .pushLine("}").subIndent()
+            .pushLine("};")
             .pushLine()
-            .pushLine("// toObject")
-            .pushLine("var %s = %s([", MESSAGE_CONVERTER, CONVERTER_CREATOR).addIndent()
-                .pushLine("{").addIndent()
-                    .pushLine("'%s': [ 'float', 'double' ],", TYPES)
-                    .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
-                        .pushLine("return %s.json && !isFinite(%s) ? String(%s) : %s;", OPTIONS, VALUE, VALUE, VALUE).subIndent()
-                    .pushLine("}").subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'int64', 'sint64', 'fixed64', 'sfixed64', 'uint64' ],", TYPES)
-                    .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
-                        .pushLine("if (typeof %s === 'number') {", VALUE).addIndent()
-                            .pushLine("return %s.longs === String ? String(%s) : %s;", OPTIONS, VALUE, VALUE).subIndent()
-                        .pushLine("}")
-                        .pushLine("if (%s.longs === String) {", OPTIONS).addIndent()
+            .pushLine("for (var i = 0; i < %s.length; i ++) {", TYPES_ARRAY).addIndent()
+                .pushLine("%s[%s[i]] = %s.Reader.prototype[%s[i]];", READER_FUNCTIONS, TYPES_ARRAY, PROTOBUF, TYPES_ARRAY)
+                .pushLine("%s[%s[i]] = %s.Writer.prototype[%s[i]];", WRITER_FUNCTIONS, TYPES_ARRAY, PROTOBUF, TYPES_ARRAY).subIndent()
+            .pushLine("}")
+            .pushLine();
+            
+            // converter creator
+            if (this._config.convert) {
+                this._codeGen
+                .pushLine("function %s(%s) {", CONVERTER_CREATOR, CONFIGS).addIndent()
+                    .pushLine("var %s = {};", CONVERTER)
+                    .pushLine("for (var i = 0; i < %s.length; i ++) {", CONFIGS).addIndent()
+                        .pushLine("var %s = %s[i];", CONFIG, CONFIGS)
+                        .pushLine("for (var j = 0; j < %s.types.length; j ++) {", CONFIG).addIndent()
+                            .pushLine("%s[%s.types[j]] = %s.%s;", CONVERTER, CONFIG, CONFIG, CONVERT_FUNCTION).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("}")
+                    .pushLine("return %s;", CONVERTER).subIndent()
+                .pushLine("}")
+                .pushLine()
+                // create converter for object -> message
+                .pushLine("// fromObject")
+                .pushLine("var %s = %s([", OBJECT_CONVERTER, CONVERTER_CREATOR).addIndent()
+                    .pushLine("{").addIndent()
+                        .pushLine("'%s': [ 'bool' ],", TYPES)
+                        .pushLine("'%s': Boolean", CONVERT_FUNCTION).subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'string' ],", TYPES)
+                        .pushLine("'%s': String", CONVERT_FUNCTION).subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'float', 'double' ],", TYPES)
+                        .pushLine("'%s': Number", CONVERT_FUNCTION).subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'uint32', 'fixed32' ],", TYPES)
+                        .pushLine("'%s': function(%s) { return %s >>> 0; }", CONVERT_FUNCTION, VALUE, VALUE).subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'int32', 'sint32', 'sfixed32' ],", TYPES)
+                        .pushLine("'%s': function(%s) { return %s | 0; }", CONVERT_FUNCTION, VALUE, VALUE).subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'int64', 'sint64', 'fixed64', 'sfixed64', 'uint64' ],", TYPES)
+                        .pushLine("'%s': function(%s, %s) {", CONVERT_FUNCTION, VALUE, TYPE).addIndent()
+                            .pushLine("var %s = undefined;", RETURN_VALUE)
                             // FIXME: support for --force-long/--force-number
                             .pushLine("// FIXME: support for --force-long/--force-number")
-                            .pushLine("return %s.util.Long.prototype.toString.call(%s);", PROTOBUF, VALUE).subIndent()
-                        .pushLine("} else if (%s.longs === Number) {", OPTIONS).addIndent()
-                            .pushLine("return new %s.util.LongBits(%s.low >>> 0, %s.high >>> 0).toNumber(%s.charAt(0) === 'u');", PROTOBUF, VALUE, VALUE, TYPE).subIndent()
-                        .pushLine("}")
-                        .pushLine("return %s;", VALUE).subIndent()
-                    .pushLine("}").subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ 'bytes' ],", TYPES)
-                    .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
-                        .pushLine("if (%s.bytes === String) {", OPTIONS).addIndent()
-                            .pushLine("return %s.util.base64.encode(%s, 0, %s.length);", PROTOBUF, VALUE, VALUE).subIndent()
-                        .pushLine("} else if (%s.bytes === Array) {", OPTIONS).addIndent()
-                            .pushLine("return Array.prototype.slice.call(%s);", VALUE).subIndent()
-                        .pushLine("}")
-                        .pushLine("if (Array.isArray(%s)) {", VALUE).addIndent()
-                            .pushLine("return %s.util.newBuffer(%s);", PROTOBUF, VALUE).subIndent()
-                        .pushLine("}")
-                        .pushLine("return %s;", VALUE).subIndent()
-                    .pushLine("}").subIndent()
-                .pushLine("}, {").addIndent()
-                    .pushLine("'%s': [ '%s' ],", TYPES, TYPE_PLACEHOLDER)
-                    .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
-                        .pushLine("if (%s[%s]) {", MESSAGE_CONVERTER, TYPE).addIndent()
-                            .pushLine("return %s[%s].call(null, %s, %s, %s);", MESSAGE_CONVERTER, TYPE, VALUE, TYPE, OPTIONS).subIndent()
-                        .pushLine("} else if (%s[%s] === undefined) {", WIRES_ARRAY, TYPE).addIndent()
-                            .pushLine("if (%s[%s].toObject) {", ROOT, TYPE).addIndent()
-                                .pushLine("return %s[%s].toObject(%s, %s);", ROOT, TYPE, VALUE, OPTIONS).subIndent()
+                            .pushLine("if (%s.util.Long) {", PROTOBUF).addIndent()
+                                .pushLine("%s = %s.util.Long.fromValue(%s);", RETURN_VALUE, PROTOBUF, VALUE)
+                                .pushLine("%s.unsigned = %s.charAt(0) === 'u';", RETURN_VALUE, TYPE).subIndent()
+                            .pushLine("} else if (typeof %s === 'object') {", VALUE).addIndent()
+                                .pushLine("%s = new %s.util.LongBits(%s.low >>> 0, %s.high >>> 0).toNumber(%s.charAt(0) === 'u');", RETURN_VALUE, PROTOBUF, VALUE, VALUE, TYPE).subIndent()
+                            .pushLine("} else if (typeof %s === 'string') {", VALUE).addIndent()
+                                .pushLine("%s = parseInt(%s, 10);", RETURN_VALUE, VALUE).subIndent()
+                            .pushLine("} else if (typeof %s === 'number') {", VALUE).addIndent()
+                                .pushLine("%s = %s;", RETURN_VALUE, VALUE).subIndent()
                             .pushLine("}")
-                            .pushLine("// enum")
-                            .pushLine("return %s.enums === String ? %s[%s][%s] : %s;", OPTIONS, ROOT, TYPE, VALUE, VALUE).subIndent()
-                        .pushLine("}")
-                        .pushLine("return %s;", VALUE).subIndent()
+                            .pushLine("return %s;", RETURN_VALUE).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'bytes' ],", TYPES)
+                        .pushLine("'%s': function(%s, %s) {", CONVERT_FUNCTION, VALUE, TYPE).addIndent()
+                            .pushLine("var %s = undefined;", RETURN_VALUE)
+                            .pushLine("if (typeof %s === 'string') {", VALUE).addIndent()
+                                .pushLine("%s = %s.util.newBuffer(%s.util.base64.length(%s))", RETURN_VALUE, PROTOBUF, PROTOBUF, VALUE)
+                                .pushLine("%s.util.base64.decode(%s, %s, 0);", PROTOBUF, VALUE, RETURN_VALUE).subIndent()
+                            .pushLine("} else if (%s.length) {", VALUE).addIndent()
+                                .pushLine("%s = %s;", RETURN_VALUE, VALUE).subIndent()
+                            .pushLine("}")
+                            .pushLine("return %s;", RETURN_VALUE).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ '%s' ],", TYPES, TYPE_PLACEHOLDER)
+                        .pushLine("'%s': function(%s, %s) {", CONVERT_FUNCTION, VALUE, TYPE).addIndent()
+                            .pushLine("if (%s[%s]) {", OBJECT_CONVERTER, TYPE).addIndent()
+                                .pushLine("return %s[%s].call(null, %s, %s);", OBJECT_CONVERTER, TYPE, VALUE, TYPE).subIndent()
+                            .pushLine("} else if (!%s[%s].fromObject) {", ROOT, TYPE).addIndent()
+                                .pushLine("// enum")
+                                .pushLine("var %s = %s[%s][%s];", RETURN_VALUE, ROOT, TYPE, VALUE)
+                                .pushLine("return typeof %s === 'string' ? %s[%s][%s] : %s;", RETURN_VALUE, ROOT, TYPE, RETURN_VALUE, RETURN_VALUE).subIndent()
+                            .pushLine("}")
+                            .pushLine("return %s[%s].fromObject(%s);", ROOT, TYPE, VALUE).subIndent()
+                        .pushLine("}").subIndent()
                     .pushLine("}").subIndent()
-                .pushLine("}").subIndent()
-            .pushLine("]);")
-            .pushLine();
-        }
+                .pushLine("]);")
+                .pushLine()
+                .pushLine("// toObject")
+                .pushLine("var %s = %s([", MESSAGE_CONVERTER, CONVERTER_CREATOR).addIndent()
+                    .pushLine("{").addIndent()
+                        .pushLine("'%s': [ 'float', 'double' ],", TYPES)
+                        .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
+                            .pushLine("return %s.json && !isFinite(%s) ? String(%s) : %s;", OPTIONS, VALUE, VALUE, VALUE).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'int64', 'sint64', 'fixed64', 'sfixed64', 'uint64' ],", TYPES)
+                        .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
+                            .pushLine("if (typeof %s === 'number') {", VALUE).addIndent()
+                                .pushLine("return %s.longs === String ? String(%s) : %s;", OPTIONS, VALUE, VALUE).subIndent()
+                            .pushLine("}")
+                            .pushLine("if (%s.longs === String) {", OPTIONS).addIndent()
+                                // FIXME: support for --force-long/--force-number
+                                .pushLine("// FIXME: support for --force-long/--force-number")
+                                .pushLine("return %s.util.Long.prototype.toString.call(%s);", PROTOBUF, VALUE).subIndent()
+                            .pushLine("} else if (%s.longs === Number) {", OPTIONS).addIndent()
+                                .pushLine("return new %s.util.LongBits(%s.low >>> 0, %s.high >>> 0).toNumber(%s.charAt(0) === 'u');", PROTOBUF, VALUE, VALUE, TYPE).subIndent()
+                            .pushLine("}")
+                            .pushLine("return %s;", VALUE).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ 'bytes' ],", TYPES)
+                        .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
+                            .pushLine("if (%s.bytes === String) {", OPTIONS).addIndent()
+                                .pushLine("return %s.util.base64.encode(%s, 0, %s.length);", PROTOBUF, VALUE, VALUE).subIndent()
+                            .pushLine("} else if (%s.bytes === Array) {", OPTIONS).addIndent()
+                                .pushLine("return Array.prototype.slice.call(%s);", VALUE).subIndent()
+                            .pushLine("}")
+                            .pushLine("if (Array.isArray(%s)) {", VALUE).addIndent()
+                                .pushLine("return %s.util.newBuffer(%s);", PROTOBUF, VALUE).subIndent()
+                            .pushLine("}")
+                            .pushLine("return %s;", VALUE).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("}, {").addIndent()
+                        .pushLine("'%s': [ '%s' ],", TYPES, TYPE_PLACEHOLDER)
+                        .pushLine("'%s': function(%s, %s, %s) {", CONVERT_FUNCTION, VALUE, TYPE, OPTIONS).addIndent()
+                            .pushLine("if (%s[%s]) {", MESSAGE_CONVERTER, TYPE).addIndent()
+                                .pushLine("return %s[%s].call(null, %s, %s, %s);", MESSAGE_CONVERTER, TYPE, VALUE, TYPE, OPTIONS).subIndent()
+                            .pushLine("} else if (%s[%s] === undefined) {", WIRES_ARRAY, TYPE).addIndent()
+                                .pushLine("if (%s[%s].toObject) {", ROOT, TYPE).addIndent()
+                                    .pushLine("return %s[%s].toObject(%s, %s);", ROOT, TYPE, VALUE, OPTIONS).subIndent()
+                                .pushLine("}")
+                                .pushLine("// enum")
+                                .pushLine("return %s.enums === String ? %s[%s][%s] : %s;", OPTIONS, ROOT, TYPE, VALUE, VALUE).subIndent()
+                            .pushLine("}")
+                            .pushLine("return %s;", VALUE).subIndent()
+                        .pushLine("}").subIndent()
+                    .pushLine("}").subIndent()
+                .pushLine("]);")
+                .pushLine();
+            }
 
-    codeGen
-        // wrapped function call
-        .pushLine("// namespace builder")
-        .pushLine("(function _(%s, %s, %s, %s) {", NAMESPACE, PATH, PARENT, IS_INNER).addIndent()
-            // iterates namespaces
-            .pushLine("for (var i = 0, %s = Object.keys(%s); i < %s.length; i ++) {", KEYS, NAMESPACE, KEYS).addIndent()
-                .pushLine("var %s = %s[i];", KEY, KEYS)
-                // handle message
-                .pushLine("if (%s[%s]['%s'] && Object.keys(%s[%s]['%s']).every(function(k) { return Number(k); })) {", NAMESPACE, KEY, MESSAGE_PLACEHOLDER, NAMESPACE, KEY, MESSAGE_PLACEHOLDER).addIndent()
-                    // protobuf.type. create classes to namespace
-                    .pushLine("// protobuf.type")
-                    .pushLine("if (%s[%s]) throw Error('field ' + path + '.' + key + ' has already existed');", PARENT, KEY)
-                    .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
-                        // constructor
-                        config.comments && codeGen.pushComments([
-                            "Constructor function wrapper for the all protobuf type.",
-                            "@constructor",
-                            `@param [${PROPERTIES}] Properties to set with`
-                        ]);
-                    codeGen
-                        .pushLine("function %s(%s) {", CLASS_NAME, PROPERTIES).addIndent()
-                            // explicitly initialize mutable object/array fields
-                            // so that these aren't just inherited from the prototype
+        this._codeGen
+            // wrapped function call
+            .pushLine("// namespace builder")
+            .pushLine("(function _(%s, %s, %s, %s) {", NAMESPACE, PATH, PARENT, IS_INNER).addIndent()
+                // iterates namespaces
+                .pushLine("for (var i = 0, %s = Object.keys(%s); i < %s.length; i ++) {", KEYS, NAMESPACE, KEYS).addIndent()
+                    .pushLine("var %s = %s[i];", KEY, KEYS)
+                    // handle message
+                    .pushLine("if (%s[%s]['%s'] && Object.keys(%s[%s]['%s']).every(function(k) { return Number(k); })) {", NAMESPACE, KEY, MESSAGE_PLACEHOLDER, NAMESPACE, KEY, MESSAGE_PLACEHOLDER).addIndent()
+                        // protobuf.type. create classes to namespace
+                        .pushLine("// protobuf.type")
+                        .pushLine("if (%s[%s]) throw Error('field ' + path + '.' + key + ' has already existed');", PARENT, KEY)
+                        .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
+                            // constructor
+                            this._config.comments && this._codeGen.pushComments([
+                                "Constructor function wrapper for the all protobuf type.",
+                                "@constructor",
+                                `@param [${PROPERTIES}] Properties to set with`
+                            ]);
+                        this._codeGen
+                            .pushLine("function %s(%s) {", CLASS_NAME, PROPERTIES).addIndent()
+                                // explicitly initialize mutable object/array fields
+                                // so that these aren't just inherited from the prototype
+                                .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
+                                    .pushLine("var %s = %s[%s];", FIELD_PAYLOAD, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("// initialize object/array fields")
+                                    .pushLine("if (%s[1].charAt(0) === '{') {", FIELD_PAYLOAD).addIndent()
+                                        .pushLine("this[%s[0]] = {};", FIELD_PAYLOAD).subIndent()
+                                    .pushLine("} else if (%s[1].charAt(0) === '[' || %s[1].charAt(0) === '<') {", FIELD_PAYLOAD, FIELD_PAYLOAD).addIndent()
+                                        .pushLine("this[%s[0]] = [];", FIELD_PAYLOAD).subIndent()
+                                    .pushLine("}").subIndent()
+                                .pushLine("}")
+                                .pushLine("if (%s) {", PROPERTIES).addIndent()
+                                    // omit undefined or null properties
+                                    .pushLine("for (var %s = Object.keys(%s), i = 0; i < %s.length; ++i) {", KEYS, PROPERTIES, KEYS).addIndent()
+                                        .pushLine("%s[%s[i]] != null && (this[%s[i]] = %s[%s[i]]);", PROPERTIES, KEYS, KEYS, PROPERTIES, KEYS).subIndent()
+                                    .pushLine("}").subIndent()
+                                .pushLine("}").subIndent()
+                            .pushLine("}")
+                            .pushLine()
+                            
+                            // prototype fields
+                            .pushLine("// set prototypes and collect inner namespace for map fields")
+                            .pushLine("var $%s = {};", NAMESPACE)
                             .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
                                 .pushLine("var %s = %s[%s];", FIELD_PAYLOAD, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("// initialize object/array fields")
-                                .pushLine("if (%s[1].charAt(0) === '{') {", FIELD_PAYLOAD).addIndent()
-                                    .pushLine("this[%s[0]] = {};", FIELD_PAYLOAD).subIndent()
-                                .pushLine("} else if (%s[1].charAt(0) === '[' || %s[1].charAt(0) === '<') {", FIELD_PAYLOAD, FIELD_PAYLOAD).addIndent()
-                                    .pushLine("this[%s[0]] = [];", FIELD_PAYLOAD).subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("}")
-                            .pushLine("if (%s) {", PROPERTIES).addIndent()
-                                // omit undefined or null properties
-                                .pushLine("for (var %s = Object.keys(%s), i = 0; i < %s.length; ++i) {", KEYS, PROPERTIES, KEYS).addIndent()
-                                    .pushLine("%s[%s[i]] != null && (this[%s[i]] = %s[%s[i]]);", PROPERTIES, KEYS, KEYS, PROPERTIES, KEYS).subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("}").subIndent()
-                        .pushLine("}")
-                        .pushLine()
-                        
-                        // prototype fields
-                        .pushLine("// set prototypes and collect inner namespace for map fields")
-                        .pushLine("var $%s = {};", NAMESPACE)
-                        .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
-                            .pushLine("var %s = %s[%s];", FIELD_PAYLOAD, FIELD_PAYLOADS, FIELD_ID)
-                            .pushLine("var %s = %s[1];", TYPE, FIELD_PAYLOAD)
-                            .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
-                                .pushLine("%s.prototype[%s[0]] = %s.util.emptyObject;", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF)
-                                // special care for map fields
-                                .pushLine("// collect all map fields")
-                                .pushLine("// { key: value } => { '1': [ '$1', <key>, null ], '2': [ '$2', <value>, null ] }")
-                                .pushLine("$%s[%s] = {", NAMESPACE, TYPE).addIndent()
-                                    .pushLine("'%s': %s.substring(1).split(',')", MESSAGE_PLACEHOLDER, TYPE).addIndent()
-                                        .pushLine(".map(function(t, i) { return ['$' + (i + 1), t, null] })")
-                                        .pushLine(".reduce(function(m, o, i) { m[i + 1] = o; return m; }, {})").subIndent().subIndent()
-                                .pushLine("};").subIndent()
-                            .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
-                                .pushLine("%s.prototype[%s[0]] = %s.util.emptyArray;", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF).subIndent()
-                            .pushLine("} else if (%s === 'bytes') {", TYPE).addIndent()
-                                .pushLine("%s.prototype[%s[0]] = %s.util.newBuffer([]);", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF).subIndent()
-                            .pushLine("} else {").addIndent()
-                                .pushLine("if (%s[2] && %s[2].hasOwnProperty('low') && %s[2].hasOwnProperty('high')) {", FIELD_PAYLOAD, FIELD_PAYLOAD, FIELD_PAYLOAD).addIndent()
-                                    .pushLine("%s.prototype[%s[0]] = %s.util.Long.fromBits(%s[2].low, %s[2].high, %s[2].unsigned);", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF, FIELD_PAYLOAD, FIELD_PAYLOAD, FIELD_PAYLOAD).subIndent()
+                                .pushLine("var %s = %s[1];", TYPE, FIELD_PAYLOAD)
+                                .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
+                                    .pushLine("%s.prototype[%s[0]] = %s.util.emptyObject;", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF)
+                                    // special care for map fields
+                                    .pushLine("// collect all map fields")
+                                    .pushLine("// { key: value } => { '1': [ '$1', <key>, null ], '2': [ '$2', <value>, null ] }")
+                                    .pushLine("$%s[%s] = {", NAMESPACE, TYPE).addIndent()
+                                        .pushLine("'%s': %s.substring(1).split(',')", MESSAGE_PLACEHOLDER, TYPE).addIndent()
+                                            .pushLine(".map(function(t, i) { return ['$' + (i + 1), t, null] })")
+                                            .pushLine(".reduce(function(m, o, i) { m[i + 1] = o; return m; }, {})").subIndent().subIndent()
+                                    .pushLine("};").subIndent()
+                                .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
+                                    .pushLine("%s.prototype[%s[0]] = %s.util.emptyArray;", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF).subIndent()
+                                .pushLine("} else if (%s === 'bytes') {", TYPE).addIndent()
+                                    .pushLine("%s.prototype[%s[0]] = %s.util.newBuffer([]);", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF).subIndent()
                                 .pushLine("} else {").addIndent()
-                                    .pushLine("%s.prototype[%s[0]] = %s[2];", CLASS_NAME, FIELD_PAYLOAD, FIELD_PAYLOAD).subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("}").subIndent()
-                        .pushLine("}")
-                        .pushLine();
-                    
-                    if (config.create) {
-                        // create
-                        config.comments && codeGen.pushComments([
-                            "Creates a new instance using the specified properties.",
-                            "@function create",
-                            "@static",
-                            `@param [${PROPERTIES}] Properties to set with`,
-                            `@returns {${CLASS_NAME}} instance`
-                        ]);
-                        codeGen
-                        .pushLine("%s.create = function(%s) {", CLASS_NAME, PROPERTIES).addIndent()
-                            .pushLine("return new %s(%s);", CLASS_NAME, PROPERTIES).subIndent()
-                        .pushLine("};")
-                        .pushLine();
-                    }
-
-                    if (config.decode) {
-                        // decode
-                        config.comments && codeGen.pushComments([
-                            "Decodes a message from the specified reader or buffer.",
-                            "@function decode",
-                            "@static",
-                            `@param {$protobuf.Reader|Uint8Array} ${READER} Reader or buffer to decode from`,
-                            `@param {number} ${LENGTH} Message length if known beforehand`,
-                            `@returns {${CLASS_NAME}} instance`,
-                            "@throws {Error} If the payload is not a reader or valid buffer",
-                            "@throws {$protobuf.util.ProtocolError} If required fields are missing"
-                        ]);
-                        codeGen
-                        .pushLine("%s.decode = function(%s, %s) {", CLASS_NAME, READER, LENGTH).addIndent()
-                            .pushLine("if (!(%s instanceof %s.Reader)) %s = %s.Reader.create(%s);", READER, PROTOBUF, READER, PROTOBUF, READER)
-                            .pushLine("var %s = %s === undefined ? %s.len : %s.pos + %s;", END_POS, LENGTH, READER, READER, LENGTH)
-                            .pushLine("var %s = new %s();", MESSAGE, CLASS_NAME)
-                            .pushLine("while (%s.pos < %s) {", READER, END_POS).addIndent()
-                                .pushLine("var %s = %s.uint32();", TAG, READER)
-                                .pushLine("var %s = %s >>> 3;", FIELD_ID, TAG)
-                                .pushLine("if (%s > 0 && %s[%s]) {", FIELD_ID, FIELD_PAYLOADS, FIELD_ID).addIndent()
-                                    .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
-                                    .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
-                                    .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
-                                    .pushLine("// map field")
-                                        // map fields are inner namespace for current class
-                                        .pushLine("if (%s[%s] === %s.util.emptyObject) {", MESSAGE, FIELD, PROTOBUF).addIndent()
-                                            .pushLine("%s[%s] = {};", MESSAGE, FIELD).subIndent()
-                                        .pushLine("}")
-                                        .pushLine("// decode map fields from inner namespace")
-                                        .pushLine("var $%s = %s[%s].$%s[%s].decode(%s, %s.uint32());", MESSAGE, PARENT, KEY, NAMESPACE, TYPE, READER, READER)
-                                        .pushLine("%s[%s][$%s['$1']] = $%s['$2'];", MESSAGE, FIELD, MESSAGE, MESSAGE).subIndent()
-                                    .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
-                                        .pushLine("// repeated field")
-                                        .pushLine("%s = %s.substring(1);", TYPE, TYPE)
-                                        .pushLine("if (!(%s[%s] && %s[%s].length)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
-                                            .pushLine("%s[%s] = [];", MESSAGE, FIELD).subIndent()
-                                        .pushLine("}")
-                                        // packable? (always check for forward and backward compatiblity)
-                                        .pushLine("if (%s[%s] !== undefined && (%s & /*2^3-1=*/7) === 2) {", PACKED_ARRAY, TYPE, TAG).addIndent()
-                                            .pushLine("// packed repeated")
-                                            .pushLine("var $%s = %s.uint32() + %s.pos;", END_POS, READER, READER)
-                                            .pushLine("while (%s.pos < $%s) {", READER, END_POS).addIndent()
-                                                .pushLine("%s[%s].push(%s['%s'].call(%s, %s));", MESSAGE, FIELD, READER_FUNCTIONS, TYPE_PLACEHOLDER, READER, TYPE).subIndent()
-                                            .pushLine("}").subIndent()
-                                        .pushLine("} else {").addIndent()
-                                            .pushLine("%s[%s].push(%s['%s'].call(%s, %s));", MESSAGE, FIELD, READER_FUNCTIONS, TYPE_PLACEHOLDER, READER, TYPE).subIndent()
-                                        .pushLine("}").subIndent()
+                                    .pushLine("if (%s[2] && %s[2].hasOwnProperty('low') && %s[2].hasOwnProperty('high')) {", FIELD_PAYLOAD, FIELD_PAYLOAD, FIELD_PAYLOAD).addIndent()
+                                        .pushLine("%s.prototype[%s[0]] = %s.util.Long.fromBits(%s[2].low, %s[2].high, %s[2].unsigned);", CLASS_NAME, FIELD_PAYLOAD, PROTOBUF, FIELD_PAYLOAD, FIELD_PAYLOAD, FIELD_PAYLOAD).subIndent()
                                     .pushLine("} else {").addIndent()
-                                        .pushLine("// non-repeated field")
-                                        .pushLine("%s[%s] = %s['%s'].call(%s, %s);", MESSAGE, FIELD, READER_FUNCTIONS, TYPE_PLACEHOLDER, READER, TYPE).subIndent()
+                                        .pushLine("%s.prototype[%s[0]] = %s[2];", CLASS_NAME, FIELD_PAYLOAD, FIELD_PAYLOAD).subIndent()
                                     .pushLine("}").subIndent()
-                                .pushLine("} else {").addIndent()
-                                    .pushLine("// unknown field")
-                                    .pushLine("%s.skipType(%s & /*2^3-1=*/7);", READER, TAG).subIndent()
                                 .pushLine("}").subIndent()
                             .pushLine("}")
-                            .pushLine("return %s;", MESSAGE).subIndent()
-                        .pushLine("};")
-                        .pushLine();
+                            .pushLine();
+                        
+                        if (this._config.create) {
+                            // create
+                            this._config.comments && this._codeGen.pushComments([
+                                "Creates a new instance using the specified properties.",
+                                "@function create",
+                                "@static",
+                                `@param [${PROPERTIES}] Properties to set with`,
+                                `@returns {${CLASS_NAME}} instance`
+                            ]);
+                            this._codeGen
+                            .pushLine("%s.create = function(%s) {", CLASS_NAME, PROPERTIES).addIndent()
+                                .pushLine("return new %s(%s);", CLASS_NAME, PROPERTIES).subIndent()
+                            .pushLine("};")
+                            .pushLine();
+                        }
 
-                        if (config.delimited) {
-                            // decodeDelimited
-                            config.comments && codeGen.pushComments([
-                                "Decodes a message from the specified reader or buffer, length delimited.",
-                                "@function decodeDelimited",
+                        if (this._config.decode) {
+                            // decode
+                            this._config.comments && this._codeGen.pushComments([
+                                "Decodes a message from the specified reader or buffer.",
+                                "@function decode",
                                 "@static",
                                 `@param {$protobuf.Reader|Uint8Array} ${READER} Reader or buffer to decode from`,
                                 `@param {number} ${LENGTH} Message length if known beforehand`,
@@ -496,489 +430,533 @@ function static_mini(root: protobuf.Root, options: IOptions, callback: Function)
                                 "@throws {Error} If the payload is not a reader or valid buffer",
                                 "@throws {$protobuf.util.ProtocolError} If required fields are missing"
                             ]);
-                            codeGen
-                            .pushLine("%s.decodeDelimited = function(%s) {", CLASS_NAME, READER).addIndent()
+                            this._codeGen
+                            .pushLine("%s.decode = function(%s, %s) {", CLASS_NAME, READER, LENGTH).addIndent()
                                 .pushLine("if (!(%s instanceof %s.Reader)) %s = %s.Reader.create(%s);", READER, PROTOBUF, READER, PROTOBUF, READER)
-                                .pushLine("return this.decode(%s, %s.uint32());", READER, READER).subIndent()
+                                .pushLine("var %s = %s === undefined ? %s.len : %s.pos + %s;", END_POS, LENGTH, READER, READER, LENGTH)
+                                .pushLine("var %s = new %s();", MESSAGE, CLASS_NAME)
+                                .pushLine("while (%s.pos < %s) {", READER, END_POS).addIndent()
+                                    .pushLine("var %s = %s.uint32();", TAG, READER)
+                                    .pushLine("var %s = %s >>> 3;", FIELD_ID, TAG)
+                                    .pushLine("if (%s > 0 && %s[%s]) {", FIELD_ID, FIELD_PAYLOADS, FIELD_ID).addIndent()
+                                        .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
+                                        .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
+                                        .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
+                                        .pushLine("// map field")
+                                            // map fields are inner namespace for current class
+                                            .pushLine("if (%s[%s] === %s.util.emptyObject) {", MESSAGE, FIELD, PROTOBUF).addIndent()
+                                                .pushLine("%s[%s] = {};", MESSAGE, FIELD).subIndent()
+                                            .pushLine("}")
+                                            .pushLine("// decode map fields from inner namespace")
+                                            .pushLine("var $%s = %s[%s].$%s[%s].decode(%s, %s.uint32());", MESSAGE, PARENT, KEY, NAMESPACE, TYPE, READER, READER)
+                                            .pushLine("%s[%s][$%s['$1']] = $%s['$2'];", MESSAGE, FIELD, MESSAGE, MESSAGE).subIndent()
+                                        .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
+                                            .pushLine("// repeated field")
+                                            .pushLine("%s = %s.substring(1);", TYPE, TYPE)
+                                            .pushLine("if (!(%s[%s] && %s[%s].length)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
+                                                .pushLine("%s[%s] = [];", MESSAGE, FIELD).subIndent()
+                                            .pushLine("}")
+                                            // packable? (always check for forward and backward compatiblity)
+                                            .pushLine("if (%s[%s] !== undefined && (%s & /*2^3-1=*/7) === 2) {", PACKED_ARRAY, TYPE, TAG).addIndent()
+                                                .pushLine("// packed repeated")
+                                                .pushLine("var $%s = %s.uint32() + %s.pos;", END_POS, READER, READER)
+                                                .pushLine("while (%s.pos < $%s) {", READER, END_POS).addIndent()
+                                                    .pushLine("%s[%s].push(%s['%s'].call(%s, %s));", MESSAGE, FIELD, READER_FUNCTIONS, TYPE_PLACEHOLDER, READER, TYPE).subIndent()
+                                                .pushLine("}").subIndent()
+                                            .pushLine("} else {").addIndent()
+                                                .pushLine("%s[%s].push(%s['%s'].call(%s, %s));", MESSAGE, FIELD, READER_FUNCTIONS, TYPE_PLACEHOLDER, READER, TYPE).subIndent()
+                                            .pushLine("}").subIndent()
+                                        .pushLine("} else {").addIndent()
+                                            .pushLine("// non-repeated field")
+                                            .pushLine("%s[%s] = %s['%s'].call(%s, %s);", MESSAGE, FIELD, READER_FUNCTIONS, TYPE_PLACEHOLDER, READER, TYPE).subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("} else {").addIndent()
+                                        .pushLine("// unknown field")
+                                        .pushLine("%s.skipType(%s & /*2^3-1=*/7);", READER, TAG).subIndent()
+                                    .pushLine("}").subIndent()
+                                .pushLine("}")
+                                .pushLine("return %s;", MESSAGE).subIndent()
                             .pushLine("};")
                             .pushLine();
-                        }
-                    }
 
-                    if (config.encode) {
-                        // encode
-                        config.comments && codeGen.pushComments([
-                            `Encodes the specified ${CLASS_NAME} message. Does not implicitly verify messages.`,
-                            "@function encode",
-                            "@static",
-                            `@param {${CLASS_NAME}} ${MESSAGE} or plain object to encode`,
-                            `@param {$protobuf.Writer} ${WRITER} Writer to encode to`,
-                            "@returns {$protobuf.Writer} Writer"
-                        ]);
-                        codeGen.pushLine("%s.encode = function(%s, %s) {", CLASS_NAME, MESSAGE, WRITER).addIndent()
-                            .pushLine("if (!%s) %s = %s.Writer.create();", WRITER, WRITER, PROTOBUF)
-                            .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
-                                .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
-                                    // map fields are inner namespace for current class
-                                    .pushLine("// map field")
-                                    .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
-                                        .pushLine("for (var i = 0, %s = Object.keys(%s[%s]); i < %s.length; ++ i) {", KEYS, MESSAGE, FIELD, KEYS).addIndent()
-                                            .pushLine("%s.uint32((%s << 3 | 2) >> 0).fork();", WRITER, FIELD_ID)
-                                            .pushLine("// encode map fields from inner namespace")
-                                            .pushLine("%s[%s].$%s[%s].encode({ '$1': %s[i], '$2': %s[%s][%s[i]] }, %s).ldelim();", PARENT, KEY, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS, WRITER).subIndent()
-                                        .pushLine("}").subIndent()
-                                    .pushLine("}").subIndent()
-                                .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
-                                    .pushLine("// repeated field")
-                                    .pushLine("var %s = %s.charAt(0) === '<';", IS_PACKED, TYPE)
-                                    .pushLine("%s = %s.substring(1);", TYPE, TYPE)
-                                    .pushLine("var %s = %s[%s];", FIELD_REPEATED, MESSAGE, FIELD)
-                                    .pushLine("if (%s != null && %s.length) {", FIELD_REPEATED, FIELD_REPEATED).addIndent()
-                                        // a type is packable only if it is specified in types.packed
-                                        .pushLine("if (%s && %s[%s] !== undefined) {", IS_PACKED, PACKED_ARRAY, TYPE).addIndent()
-                                            .pushLine("// packed repeated")
-                                            .pushLine("%s.uint32((%s << 3 | 2) >> 0).fork();", WRITER, FIELD_ID)
-                                            .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
-                                                .pushLine("%s[%s].call(%s, %s[i]);", WRITER_FUNCTIONS, TYPE, WRITER, FIELD_REPEATED).subIndent()
-                                            .pushLine("}")
-                                            .pushLine("%s.ldelim();", WRITER).subIndent()
-                                        .pushLine("} else {").addIndent()
-                                            .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
-                                                .pushLine("%s['%s'].call(%s, %s, %s[i], %s);", WRITER_FUNCTIONS, TYPE_PLACEHOLDER, WRITER, TYPE, FIELD_REPEATED, FIELD_ID).subIndent()
-                                            .pushLine("}").subIndent()
-                                        .pushLine("}").subIndent()
-                                    .pushLine("}").subIndent()
-                                .pushLine("} else {").addIndent()
-                                    .pushLine("// non-repeated field")
-                                    .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
-                                        .pushLine("%s['%s'].call(%s, %s, %s[%s], %s);", WRITER_FUNCTIONS, TYPE_PLACEHOLDER, WRITER, TYPE, MESSAGE, FIELD, FIELD_ID).subIndent()
-                                    .pushLine("}").subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("}")
-                            .pushLine("return %s;", WRITER).subIndent()
-                        .pushLine("};")
-                        .pushLine();
-                        
-                        if (config.delimited) {
-                            // encodeDelimited
-                            config.comments && codeGen.pushComments([
-                                `Encodes the specified ${CLASS_NAME} message, length delimited. Does not implicitly verify messages.`,
+                            if (this._config.delimited) {
+                                // decodeDelimited
+                                this._config.comments && this._codeGen.pushComments([
+                                    "Decodes a message from the specified reader or buffer, length delimited.",
+                                    "@function decodeDelimited",
+                                    "@static",
+                                    `@param {$protobuf.Reader|Uint8Array} ${READER} Reader or buffer to decode from`,
+                                    `@param {number} ${LENGTH} Message length if known beforehand`,
+                                    `@returns {${CLASS_NAME}} instance`,
+                                    "@throws {Error} If the payload is not a reader or valid buffer",
+                                    "@throws {$protobuf.util.ProtocolError} If required fields are missing"
+                                ]);
+                                this._codeGen
+                                .pushLine("%s.decodeDelimited = function(%s) {", CLASS_NAME, READER).addIndent()
+                                    .pushLine("if (!(%s instanceof %s.Reader)) %s = %s.Reader.create(%s);", READER, PROTOBUF, READER, PROTOBUF, READER)
+                                    .pushLine("return this.decode(%s, %s.uint32());", READER, READER).subIndent()
+                                .pushLine("};")
+                                .pushLine();
+                            }
+                        }
+
+                        if (this._config.encode) {
+                            // encode
+                            this._config.comments && this._codeGen.pushComments([
+                                `Encodes the specified ${CLASS_NAME} message. Does not implicitly verify messages.`,
                                 "@function encode",
                                 "@static",
                                 `@param {${CLASS_NAME}} ${MESSAGE} or plain object to encode`,
                                 `@param {$protobuf.Writer} ${WRITER} Writer to encode to`,
                                 "@returns {$protobuf.Writer} Writer"
                             ]);
-                            codeGen
-                            .pushLine("%s.encodeDelimited = function(%s, %s) {", CLASS_NAME, MESSAGE, WRITER).addIndent()
-                                .pushLine("return this.encode(%s, %s).ldelim();", MESSAGE, WRITER).subIndent()
+                            this._codeGen.pushLine("%s.encode = function(%s, %s) {", CLASS_NAME, MESSAGE, WRITER).addIndent()
+                                .pushLine("if (!%s) %s = %s.Writer.create();", WRITER, WRITER, PROTOBUF)
+                                .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
+                                    .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
+                                        // map fields are inner namespace for current class
+                                        .pushLine("// map field")
+                                        .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
+                                            .pushLine("for (var i = 0, %s = Object.keys(%s[%s]); i < %s.length; ++ i) {", KEYS, MESSAGE, FIELD, KEYS).addIndent()
+                                                .pushLine("%s.uint32((%s << 3 | 2) >> 0).fork();", WRITER, FIELD_ID)
+                                                .pushLine("// encode map fields from inner namespace")
+                                                .pushLine("%s[%s].$%s[%s].encode({ '$1': %s[i], '$2': %s[%s][%s[i]] }, %s).ldelim();", PARENT, KEY, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS, WRITER).subIndent()
+                                            .pushLine("}").subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
+                                        .pushLine("// repeated field")
+                                        .pushLine("var %s = %s.charAt(0) === '<';", IS_PACKED, TYPE)
+                                        .pushLine("%s = %s.substring(1);", TYPE, TYPE)
+                                        .pushLine("var %s = %s[%s];", FIELD_REPEATED, MESSAGE, FIELD)
+                                        .pushLine("if (%s != null && %s.length) {", FIELD_REPEATED, FIELD_REPEATED).addIndent()
+                                            // a type is packable only if it is specified in types.packed
+                                            .pushLine("if (%s && %s[%s] !== undefined) {", IS_PACKED, PACKED_ARRAY, TYPE).addIndent()
+                                                .pushLine("// packed repeated")
+                                                .pushLine("%s.uint32((%s << 3 | 2) >> 0).fork();", WRITER, FIELD_ID)
+                                                .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
+                                                    .pushLine("%s[%s].call(%s, %s[i]);", WRITER_FUNCTIONS, TYPE, WRITER, FIELD_REPEATED).subIndent()
+                                                .pushLine("}")
+                                                .pushLine("%s.ldelim();", WRITER).subIndent()
+                                            .pushLine("} else {").addIndent()
+                                                .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
+                                                    .pushLine("%s['%s'].call(%s, %s, %s[i], %s);", WRITER_FUNCTIONS, TYPE_PLACEHOLDER, WRITER, TYPE, FIELD_REPEATED, FIELD_ID).subIndent()
+                                                .pushLine("}").subIndent()
+                                            .pushLine("}").subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("} else {").addIndent()
+                                        .pushLine("// non-repeated field")
+                                        .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
+                                            .pushLine("%s['%s'].call(%s, %s, %s[%s], %s);", WRITER_FUNCTIONS, TYPE_PLACEHOLDER, WRITER, TYPE, MESSAGE, FIELD, FIELD_ID).subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("}").subIndent()
+                                .pushLine("}")
+                                .pushLine("return %s;", WRITER).subIndent()
                             .pushLine("};")
                             .pushLine();
+                            
+                            if (this._config.delimited) {
+                                // encodeDelimited
+                                this._config.comments && this._codeGen.pushComments([
+                                    `Encodes the specified ${CLASS_NAME} message, length delimited. Does not implicitly verify messages.`,
+                                    "@function encode",
+                                    "@static",
+                                    `@param {${CLASS_NAME}} ${MESSAGE} or plain object to encode`,
+                                    `@param {$protobuf.Writer} ${WRITER} Writer to encode to`,
+                                    "@returns {$protobuf.Writer} Writer"
+                                ]);
+                                this._codeGen
+                                .pushLine("%s.encodeDelimited = function(%s, %s) {", CLASS_NAME, MESSAGE, WRITER).addIndent()
+                                    .pushLine("return this.encode(%s, %s).ldelim();", MESSAGE, WRITER).subIndent()
+                                .pushLine("};")
+                                .pushLine();
+                            }
                         }
-                    }
 
-                    if (config.convert) {
-                        // fromObject
-                        config.comments && codeGen.pushComments([
-                            `Creates a ${CLASS_NAME} message from plain object. Also converts values to their respective internal types.`,
-                            "@function fromObject",
-                            "@static",
-                            "@param {Object.<string,*>} object Plain object",
-                            `@param {${CLASS_NAME}} message`
-                        ]);
-                        codeGen.pushLine("%s.fromObject = function(%s) {", CLASS_NAME, OBJECT).addIndent()
-                            .pushLine("if (%s instanceof %s[%s]) return %s;", OBJECT, PARENT, KEY, OBJECT)
-                            .pushLine("var %s = new %s();", MESSAGE, CLASS_NAME)
-                            .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
-                                .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("var %s = %s[%s];", PROPERTY, OBJECT, FIELD)
-                                .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
-                                    .pushLine("// map field")
-                                    .pushLine("if (!%s) continue;", PROPERTY)
-                                    .pushLine("if (typeof %s !== 'object') throw TypeError(%s + '.' + %s + '.' + %s + ': object expected');", PROPERTY, PATH, KEY, FIELD)
-                                    .pushLine("var %s = {};", FIELD_MAP)
-                                    .pushLine("var %s = %s.substring(1).split(',')[1];", VALUE_TYPE, TYPE)
-                                    .pushLine("for (var i = 0, %s = Object.keys(%s); i < %s.length; ++ i) {", KEYS, PROPERTY, KEYS).addIndent()
-                                        .pushLine("%s[%s[i]] = %s['%s'].call(null, %s[%s[i]], %s);", FIELD_MAP, KEYS, OBJECT_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, KEYS, VALUE_TYPE).subIndent()
-                                    .pushLine("}")
-                                    .pushLine("%s[%s] = %s;", MESSAGE, FIELD, FIELD_MAP).subIndent()
-                                .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
-                                    .pushLine("// repeated field")
-                                    .pushLine("if (!%s) continue;", PROPERTY)
-                                    .pushLine("if (!Array.isArray(%s)) throw TypeError(%s + '.' + %s + '.' + %s + ': arary excepted');", PROPERTY, PATH, KEY, TYPE)
-                                    .pushLine("var %s = [];", FIELD_REPEATED)
-                                    .pushLine("%s = %s.substring(1);", TYPE, TYPE)
-                                    .pushLine("for (var i = 0; i < %s.length; i ++) {", PROPERTY).addIndent()
-                                        .pushLine("%s[i] = %s['%s'].call(null, %s[i], %s);", FIELD_REPEATED, OBJECT_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE).subIndent()
-                                    .pushLine("}")
-                                    .pushLine("%s[%s] = %s;", MESSAGE, FIELD, FIELD_REPEATED).subIndent()
-                                .pushLine("} else {").addIndent()
-                                    .pushLine("// non-repeated field")
-                                    .pushLine("if (%s != null) {", PROPERTY).addIndent()
-                                        .pushLine("%s[%s] = %s['%s'].call(null, %s, %s);", MESSAGE, FIELD, OBJECT_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE).subIndent()
-                                    .pushLine("}").subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("}")
-                            .pushLine("return %s;", MESSAGE).subIndent()
-                        .pushLine("};")
-                        .pushLine();
-
-                        // toObject
-                        config.comments && codeGen.pushComments([
-                            `Creates a plain object from a ${CLASS_NAME} message. Also converts values to other types if specified.`,
-                            "@function toObject",
-                            "@static",
-                            `@param {${CLASS_NAME}} ${MESSAGE} protobuf message`,
-                            "@param {$protobuf.IConversionOptions} [options] Conversion options",
-                            "@returns {Object.<string,*>} Plain object"
-                        ]);
-                        codeGen.pushLine("%s.toObject = function(%s, %s) {", CLASS_NAME, MESSAGE, OPTIONS).addIndent()
-                            .pushLine("%s = %s || {};", OPTIONS, OPTIONS)
-                            .pushLine("var %s = {};", OBJECT)
-                            .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
-                                .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("var %s = %s[%s];", PROPERTY, MESSAGE, FIELD)
-                                .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
-                                    .pushLine("// map field")
-                                    .pushLine("if (%s.objects || %s.defaults) {", OPTIONS, OPTIONS).addIndent()
-                                        .pushLine("%s[%s] = {};", OBJECT, FIELD).subIndent()
-                                    .pushLine("}")
-                                    .pushLine("var %s = %s ? Object.keys(%s) : [];", KEYS, PROPERTY, PROPERTY)
-                                    .pushLine("if (%s.length) {", KEYS).addIndent()
+                        if (this._config.convert) {
+                            // fromObject
+                            this._config.comments && this._codeGen.pushComments([
+                                `Creates a ${CLASS_NAME} message from plain object. Also converts values to their respective internal types.`,
+                                "@function fromObject",
+                                "@static",
+                                "@param {Object.<string,*>} object Plain object",
+                                `@param {${CLASS_NAME}} message`
+                            ]);
+                            this._codeGen.pushLine("%s.fromObject = function(%s) {", CLASS_NAME, OBJECT).addIndent()
+                                .pushLine("if (%s instanceof %s[%s]) return %s;", OBJECT, PARENT, KEY, OBJECT)
+                                .pushLine("var %s = new %s();", MESSAGE, CLASS_NAME)
+                                .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
+                                    .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("var %s = %s[%s];", PROPERTY, OBJECT, FIELD)
+                                    .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
+                                        .pushLine("// map field")
+                                        .pushLine("if (!%s) continue;", PROPERTY)
+                                        .pushLine("if (typeof %s !== 'object') throw TypeError(%s + '.' + %s + '.' + %s + ': object expected');", PROPERTY, PATH, KEY, FIELD)
                                         .pushLine("var %s = {};", FIELD_MAP)
                                         .pushLine("var %s = %s.substring(1).split(',')[1];", VALUE_TYPE, TYPE)
-                                        .pushLine("for (var i = 0; i < %s.length; i ++) {", KEYS).addIndent()
-                                            .pushLine("%s[%s[i]] = %s['%s'].call(null, %s[%s[i]], %s, %s);", FIELD_MAP, KEYS, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, KEYS, VALUE_TYPE, OPTIONS).subIndent()
+                                        .pushLine("for (var i = 0, %s = Object.keys(%s); i < %s.length; ++ i) {", KEYS, PROPERTY, KEYS).addIndent()
+                                            .pushLine("%s[%s[i]] = %s['%s'].call(null, %s[%s[i]], %s);", FIELD_MAP, KEYS, OBJECT_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, KEYS, VALUE_TYPE).subIndent()
                                         .pushLine("}")
-                                        .pushLine("%s[%s] = %s;", OBJECT, FIELD, FIELD_MAP).subIndent()
-                                    .pushLine("}").subIndent()
-                                .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
-                                    .pushLine("// repeated field")
-                                    .pushLine("if (%s.arrays || %s.defaults) {", OPTIONS, OPTIONS).addIndent()
-                                        .pushLine("%s[%s] = [];", OBJECT, FIELD).subIndent()
-                                    .pushLine("}")
-                                    .pushLine("if (%s && %s.length) {", PROPERTY, PROPERTY).addIndent()
+                                        .pushLine("%s[%s] = %s;", MESSAGE, FIELD, FIELD_MAP).subIndent()
+                                    .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
+                                        .pushLine("// repeated field")
+                                        .pushLine("if (!%s) continue;", PROPERTY)
+                                        .pushLine("if (!Array.isArray(%s)) throw TypeError(%s + '.' + %s + '.' + %s + ': arary excepted');", PROPERTY, PATH, KEY, TYPE)
                                         .pushLine("var %s = [];", FIELD_REPEATED)
                                         .pushLine("%s = %s.substring(1);", TYPE, TYPE)
                                         .pushLine("for (var i = 0; i < %s.length; i ++) {", PROPERTY).addIndent()
-                                            .pushLine("%s[i] = %s['%s'].call(null, %s[i], %s, %s);", FIELD_REPEATED, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE, OPTIONS).subIndent()
+                                            .pushLine("%s[i] = %s['%s'].call(null, %s[i], %s);", FIELD_REPEATED, OBJECT_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE).subIndent()
                                         .pushLine("}")
-                                        .pushLine("%s[%s] = %s;", OBJECT, FIELD, FIELD_REPEATED).subIndent()
+                                        .pushLine("%s[%s] = %s;", MESSAGE, FIELD, FIELD_REPEATED).subIndent()
+                                    .pushLine("} else {").addIndent()
+                                        .pushLine("// non-repeated field")
+                                        .pushLine("if (%s != null) {", PROPERTY).addIndent()
+                                            .pushLine("%s[%s] = %s['%s'].call(null, %s, %s);", MESSAGE, FIELD, OBJECT_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE).subIndent()
+                                        .pushLine("}").subIndent()
                                     .pushLine("}").subIndent()
-                                .pushLine("} else {").addIndent()
-                                    .pushLine("// non-repeated field")
-                                    .pushLine("if (%s.defaults) {", OPTIONS).addIndent()
-                                        .pushLine("%s[%s] = %s['%s'].call(null, %s[%s][2], %s, %s);", OBJECT, FIELD, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, FIELD_PAYLOADS, FIELD_ID, TYPE, OPTIONS).subIndent()
-                                    .pushLine("}")
-                                    .pushLine("if (%s != null && %s.hasOwnProperty(%s)) {", PROPERTY, MESSAGE, FIELD).addIndent()
-                                        .pushLine("%s[%s] = %s['%s'].call(null, %s, %s, %s);", OBJECT, FIELD, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE, OPTIONS).subIndent()
+                                .pushLine("}")
+                                .pushLine("return %s;", MESSAGE).subIndent()
+                            .pushLine("};")
+                            .pushLine();
+
+                            // toObject
+                            this._config.comments && this._codeGen.pushComments([
+                                `Creates a plain object from a ${CLASS_NAME} message. Also converts values to other types if specified.`,
+                                "@function toObject",
+                                "@static",
+                                `@param {${CLASS_NAME}} ${MESSAGE} protobuf message`,
+                                "@param {$protobuf.IConversionOptions} [options] Conversion options",
+                                "@returns {Object.<string,*>} Plain object"
+                            ]);
+                            this._codeGen.pushLine("%s.toObject = function(%s, %s) {", CLASS_NAME, MESSAGE, OPTIONS).addIndent()
+                                .pushLine("%s = %s || {};", OPTIONS, OPTIONS)
+                                .pushLine("var %s = {};", OBJECT)
+                                .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
+                                    .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("var %s = %s[%s];", PROPERTY, MESSAGE, FIELD)
+                                    .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
+                                        .pushLine("// map field")
+                                        .pushLine("if (%s.objects || %s.defaults) {", OPTIONS, OPTIONS).addIndent()
+                                            .pushLine("%s[%s] = {};", OBJECT, FIELD).subIndent()
+                                        .pushLine("}")
+                                        .pushLine("var %s = %s ? Object.keys(%s) : [];", KEYS, PROPERTY, PROPERTY)
+                                        .pushLine("if (%s.length) {", KEYS).addIndent()
+                                            .pushLine("var %s = {};", FIELD_MAP)
+                                            .pushLine("var %s = %s.substring(1).split(',')[1];", VALUE_TYPE, TYPE)
+                                            .pushLine("for (var i = 0; i < %s.length; i ++) {", KEYS).addIndent()
+                                                .pushLine("%s[%s[i]] = %s['%s'].call(null, %s[%s[i]], %s, %s);", FIELD_MAP, KEYS, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, KEYS, VALUE_TYPE, OPTIONS).subIndent()
+                                            .pushLine("}")
+                                            .pushLine("%s[%s] = %s;", OBJECT, FIELD, FIELD_MAP).subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
+                                        .pushLine("// repeated field")
+                                        .pushLine("if (%s.arrays || %s.defaults) {", OPTIONS, OPTIONS).addIndent()
+                                            .pushLine("%s[%s] = [];", OBJECT, FIELD).subIndent()
+                                        .pushLine("}")
+                                        .pushLine("if (%s && %s.length) {", PROPERTY, PROPERTY).addIndent()
+                                            .pushLine("var %s = [];", FIELD_REPEATED)
+                                            .pushLine("%s = %s.substring(1);", TYPE, TYPE)
+                                            .pushLine("for (var i = 0; i < %s.length; i ++) {", PROPERTY).addIndent()
+                                                .pushLine("%s[i] = %s['%s'].call(null, %s[i], %s, %s);", FIELD_REPEATED, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE, OPTIONS).subIndent()
+                                            .pushLine("}")
+                                            .pushLine("%s[%s] = %s;", OBJECT, FIELD, FIELD_REPEATED).subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("} else {").addIndent()
+                                        .pushLine("// non-repeated field")
+                                        .pushLine("if (%s.defaults) {", OPTIONS).addIndent()
+                                            .pushLine("%s[%s] = %s['%s'].call(null, %s[%s][2], %s, %s);", OBJECT, FIELD, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, FIELD_PAYLOADS, FIELD_ID, TYPE, OPTIONS).subIndent()
+                                        .pushLine("}")
+                                        .pushLine("if (%s != null && %s.hasOwnProperty(%s)) {", PROPERTY, MESSAGE, FIELD).addIndent()
+                                            .pushLine("%s[%s] = %s['%s'].call(null, %s, %s, %s);", OBJECT, FIELD, MESSAGE_CONVERTER, TYPE_PLACEHOLDER, PROPERTY, TYPE, OPTIONS).subIndent()
+                                        .pushLine("}").subIndent()
                                     .pushLine("}").subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("}")
-                            .pushLine("return %s;", OBJECT).subIndent()
-                        .pushLine("};")
-                        .pushLine();
+                                .pushLine("}")
+                                .pushLine("return %s;", OBJECT).subIndent()
+                            .pushLine("};")
+                            .pushLine();
 
-                        // toJSON
-                        config.comments && codeGen.pushComments([
-                            `Converts this ${CLASS_NAME} to JSON.`,
-                            "@function toJSON",
-                            "@instance",
-                            "@returns {Object.<string,*>} JSON object"
-                        ]);
-                        codeGen.pushLine("%s.prototype.toJSON = function() {", CLASS_NAME).addIndent()
-                            .pushLine("return this.constructor.toObject(this, %s.util.toJSONOptions);", PROTOBUF).subIndent()
-                        .pushLine("};")
-                        .pushLine();
-                    }
+                            // toJSON
+                            this._config.comments && this._codeGen.pushComments([
+                                `Converts this ${CLASS_NAME} to JSON.`,
+                                "@function toJSON",
+                                "@instance",
+                                "@returns {Object.<string,*>} JSON object"
+                            ]);
+                            this._codeGen.pushLine("%s.prototype.toJSON = function() {", CLASS_NAME).addIndent()
+                                .pushLine("return this.constructor.toObject(this, %s.util.toJSONOptions);", PROTOBUF).subIndent()
+                            .pushLine("};")
+                            .pushLine();
+                        }
 
-                    if (config.verify) {
-                        config.comments && codeGen.pushComments([
-                            "Verifies " + CLASS_NAME + " message.",
-                            "@function verify",
-                            "@static",
-                            "@param {Object.<string,*>} message Plain object to verify",
-                            "@returns {string|null} `null` if valid, otherwise the reason why it is not"
-                        ]);
-                        codeGen.pushLine("%s.verify = function(%s) {", CLASS_NAME, MESSAGE).addIndent()
-                            .pushLine("if (typeof %s !=='object' || %s === null) return 'object expected'", MESSAGE, MESSAGE)
-                            .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
-                                .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
-                                .pushLine("var %s = %s + '.' + %s + '.' + %s;", FIELD_NAME, PATH, KEY, FIELD)
-                                .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
-                                    // map fields are inner namespace for current class
-                                    .pushLine("// map field")
-                                    .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
-                                        .pushLine("if (!%s.util.isObject(%s[%s])) return %s({ %s: %s, %s: true }, 'object');", PROTOBUF, MESSAGE, FIELD, INVALID, NAME, FIELD_NAME, FIELD_MAP, )
-                                        .pushLine("var %s = Object.keys(%s[%s]);", KEYS, MESSAGE, FIELD)
-                                        .pushLine("for (var i = 0; i < %s.length; ++i) {", KEYS).addIndent()
-                                            .pushLine("%s[%s].$%s[%s].%s = %s", PARENT, KEY, NAMESPACE, TYPE, INNER_FIELD_NAME, FIELD_NAME)
-                                            .pushLine("var error = %s[%s].$%s[%s].verify({ '$1': %s[i], '$2': %s[%s][%s[i]] });", PARENT, KEY, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS)
+                        if (this._config.verify) {
+                            this._config.comments && this._codeGen.pushComments([
+                                "Verifies " + CLASS_NAME + " message.",
+                                "@function verify",
+                                "@static",
+                                "@param {Object.<string,*>} message Plain object to verify",
+                                "@returns {string|null} `null` if valid, otherwise the reason why it is not"
+                            ]);
+                            this._codeGen.pushLine("%s.verify = function(%s) {", CLASS_NAME, MESSAGE).addIndent()
+                                .pushLine("if (typeof %s !=='object' || %s === null) return 'object expected'", MESSAGE, MESSAGE)
+                                .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
+                                    .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
+                                    .pushLine("var %s = %s + '.' + %s + '.' + %s;", FIELD_NAME, PATH, KEY, FIELD)
+                                    .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
+                                        // map fields are inner namespace for current class
+                                        .pushLine("// map field")
+                                        .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
+                                            .pushLine("if (!%s.util.isObject(%s[%s])) return %s({ %s: %s, %s: true }, 'object');", PROTOBUF, MESSAGE, FIELD, INVALID, NAME, FIELD_NAME, FIELD_MAP, )
+                                            .pushLine("var %s = Object.keys(%s[%s]);", KEYS, MESSAGE, FIELD)
+                                            .pushLine("for (var i = 0; i < %s.length; ++i) {", KEYS).addIndent()
+                                                .pushLine("%s[%s].$%s[%s].%s = %s", PARENT, KEY, NAMESPACE, TYPE, INNER_FIELD_NAME, FIELD_NAME)
+                                                .pushLine("var error = %s[%s].$%s[%s].verify({ '$1': %s[i], '$2': %s[%s][%s[i]] });", PARENT, KEY, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS)
+                                                .pushLine("if (error) return error;").subIndent()
+                                            .pushLine("}").subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
+                                        .pushLine("// repeated field")
+                                        .pushLine("%s = %s.substring(1);", TYPE, TYPE)
+                                        .pushLine("var %s = %s[%s];", FIELD_REPEATED, MESSAGE, FIELD)
+                                        .pushLine("if (!Array.isArray(%s)) {", FIELD_REPEATED).addIndent()
+                                            .pushLine("return %s({ %s: %s, %s: true }, 'array')", INVALID, NAME, FIELD_NAME, REPEATED).subIndent()
+                                        .pushLine("}")
+                                        .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
+                                            .pushLine("var error = %s['%s'](%s, %s[i], { %s: %s + '[' + i + ']', %s: true });", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED, NAME, FIELD_NAME, REPEATED)
+                                            .pushLine("if (error) return error;").subIndent()
+                                        .pushLine("}").subIndent()
+                                    .pushLine("} else {").addIndent()
+                                        .pushLine("// non-repeated field")
+                                        .pushLine("if (%s === '$1' || %s === '$2') %s = this.%s;", FIELD, FIELD, FIELD_NAME, INNER_FIELD_NAME)
+                                        .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
+                                            .pushLine("var error = %s['%s'](%s, %s[%s], { %s: %s }, %s);", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD, NAME, FIELD_NAME, FIELD)
                                             .pushLine("if (error) return error;").subIndent()
                                         .pushLine("}").subIndent()
                                     .pushLine("}").subIndent()
-                                .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
-                                    .pushLine("// repeated field")
-                                    .pushLine("%s = %s.substring(1);", TYPE, TYPE)
-                                    .pushLine("var %s = %s[%s];", FIELD_REPEATED, MESSAGE, FIELD)
-                                    .pushLine("if (!Array.isArray(%s)) {", FIELD_REPEATED).addIndent()
-                                        .pushLine("return %s({ %s: %s, %s: true }, 'array')", INVALID, NAME, FIELD_NAME, REPEATED).subIndent()
-                                    .pushLine("}")
-                                    .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
-                                        .pushLine("var error = %s['%s'](%s, %s[i], { %s: %s + '[' + i + ']', %s: true });", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED, NAME, FIELD_NAME, REPEATED)
-                                        .pushLine("if (error) return error;").subIndent()
-                                    .pushLine("}").subIndent()
-                                .pushLine("} else {").addIndent()
-                                    .pushLine("// non-repeated field")
-                                    .pushLine("if (%s === '$1' || %s === '$2') %s = this.%s;", FIELD, FIELD, FIELD_NAME, INNER_FIELD_NAME)
-                                    .pushLine("if (%s[%s] != null && %s.hasOwnProperty(%s)) {", MESSAGE, FIELD, MESSAGE, FIELD).addIndent()
-                                        .pushLine("var error = %s['%s'](%s, %s[%s], { %s: %s }, %s);", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, MESSAGE, FIELD, NAME, FIELD_NAME, FIELD)
-                                        .pushLine("if (error) return error;").subIndent()
-                                    .pushLine("}").subIndent()
-                                .pushLine("}").subIndent()
-                            .pushLine("}")
-                            .pushLine("return null;").subIndent()
-                        .pushLine("};")
-                        .pushLine();
-                    }
-
-                    codeGen
-                        // for map fields there's a namespace implicitly created under current class,
-                        // so that we could easily parse it exclusively from decoder
-                        .pushLine("// create inner namespace for each map field")
-                        .pushLine("if (Object.keys($%s).length) {", NAMESPACE).addIndent()
-                            .pushLine("%s.$%s = _($%s, %s + '.' + %s, %s.$%s || {}, true);", CLASS_NAME, NAMESPACE, NAMESPACE, PATH, KEY, CLASS_NAME, NAMESPACE).subIndent()
-                        .pushLine("}")
-                        .pushLine()
-                        // return constructor
-                        .pushLine("return %s;", CLASS_NAME).subIndent()
-                        // passing module[key], key to create class
-                    .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, MESSAGE_PLACEHOLDER, KEY).subIndent();
-
-                // handle service
-                codeGen
-                .pushLine("} else if (%s[%s]['%s']) {", NAMESPACE, KEY, SERVICE_PLACEHOLDER).addIndent()
-                    .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
-                        // constructor
-                        config.comments && codeGen.pushComments([
-                            "* Constructs a new service.",
-                            `* @extends ${PROTOBUF}.rpc.Service`,
-                            "* @constructor",
-                            `* @param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
-                            "* @param {boolean} [requestDelimited=false] Whether requests are length-delimited",
-                            "* @param {boolean} [responseDelimited=false] Whether responses are length-delimited"
-                        ]);
-                        codeGen
-                        .pushLine('function %s(%s, requestDelimited, responseDelimited) {', CLASS_NAME, RPC_IMPL).addIndent()
-                            .pushLine('%s.rpc.Service.call(this, %s, requestDelimited, responseDelimited);', PROTOBUF, RPC_IMPL).subIndent()
-                        .pushLine('}')
-                        .pushLine()
-                        .pushLine('(%s.prototype = Object.create(%s.rpc.Service.prototype)).constructor = %s;', CLASS_NAME, PROTOBUF, CLASS_NAME)
-                        .pushLine()
-
-                    if (config.create) {
-                        // create
-                        config.comments && codeGen.pushComments([
-                            "Creates new service using the specified rpc implementation.",
-                            "@function create",
-                            "@static",
-                            `@param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
-                            "@param {boolean} [requestDelimited=false] Whether requests are length-delimited",
-                            "@param {boolean} [responseDelimited=false] Whether responses are length-delimited",
-                            "@returns RPC service. Useful where requests and/or responses are streamed."
-                        ]);
-                        codeGen
-                        .pushLine("%s.create = function(%s, requestDelimited, responseDelimited) {", CLASS_NAME, RPC_IMPL).addIndent()
-                            .pushLine("return new %s(%s, requestDelimited, responseDelimited);", CLASS_NAME, RPC_IMPL).subIndent()
-                        .pushLine("};")
-                        .pushLine();
-                    }
-
-                    // setup rpc methods
-                    codeGen
-                        .pushLine("// setup RPC methods")
-                        .pushLine("for (var %s in %s) {", RPC_METHOD, FIELD_PAYLOADS).addIndent()
-                            .pushLine("var rpc = function(request, callback) {").addIndent()
-                                .pushLine("return this.rpcCall(rpc, %s[%s[%s][0]], %s[%s[%s][1]], request, callback);", ROOT, FIELD_PAYLOADS, RPC_METHOD, ROOT, FIELD_PAYLOADS, RPC_METHOD).subIndent()
+                                .pushLine("}")
+                                .pushLine("return null;").subIndent()
                             .pushLine("};")
-                            .pushLine("Object.defineProperty(%s.prototype[%s] = rpc, 'name', { value: %s });", CLASS_NAME, RPC_METHOD, RPC_METHOD).subIndent()
-                        .pushLine("}")
-                        .pushLine()
+                            .pushLine();
+                        }
 
-                        // return constructor
-                        .pushLine("return %s;", CLASS_NAME).subIndent()
-                    // passing module[key], key to create class
-                    .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, SERVICE_PLACEHOLDER, KEY).subIndent();
+                        this._codeGen
+                            // for map fields there's a namespace implicitly created under current class,
+                            // so that we could easily parse it exclusively from decoder
+                            .pushLine("// create inner namespace for each map field")
+                            .pushLine("if (Object.keys($%s).length) {", NAMESPACE).addIndent()
+                                .pushLine("%s.$%s = _($%s, %s + '.' + %s, %s.$%s || {}, true);", CLASS_NAME, NAMESPACE, NAMESPACE, PATH, KEY, CLASS_NAME, NAMESPACE).subIndent()
+                            .pushLine("}")
+                            .pushLine()
+                            // return constructor
+                            .pushLine("return %s;", CLASS_NAME).subIndent()
+                            // passing module[key], key to create class
+                        .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, MESSAGE_PLACEHOLDER, KEY).subIndent();
 
-                // handle enum
-                codeGen
-                .pushLine("} else if (%s[%s]['%s'] && Object.values(%s[%s]['%s']).every(function(v) { return Number(v) === v; })) {", NAMESPACE, KEY, ENUM_PLACEHOLDER, NAMESPACE, KEY, ENUM_PLACEHOLDER).addIndent()
-                    .pushLine("// protobuf.enum")
-                    .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent()
-                        .pushLine("var %s = Object.keys(%s);", KEYS, FIELD_PAYLOADS)
-                        .pushLine("var %s = {};", VALUES)
-                        .pushLine("for (var i = 0; i < %s.length; i ++) {", KEYS).addIndent()
-                            .pushLine("%s[%s[%s[i]] = %s[%s[i]]] = %s[i];", VALUES, VALUES, KEYS, FIELD_PAYLOADS, KEYS, KEYS).subIndent()
-                        .pushLine("}");
-                    if (config.verify) {
-                        codeGen
-                        .pushLine("var vals = {};")
-                        .pushLine("%s.forEach(function (i) { vals[%s[i]] = 1; });", KEYS, VALUES)
-                        .pushLine("%s.%s = vals;", VALUES, RESOLVED_TYPE);
-                    }
+                    // handle service
+                    this._codeGen
+                    .pushLine("} else if (%s[%s]['%s']) {", NAMESPACE, KEY, SERVICE_PLACEHOLDER).addIndent()
+                        .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
+                            // constructor
+                            this._config.comments && this._codeGen.pushComments([
+                                "* Constructs a new service.",
+                                `* @extends ${PROTOBUF}.rpc.Service`,
+                                "* @constructor",
+                                `* @param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
+                                "* @param {boolean} [requestDelimited=false] Whether requests are length-delimited",
+                                "* @param {boolean} [responseDelimited=false] Whether responses are length-delimited"
+                            ]);
+                            this._codeGen
+                            .pushLine('function %s(%s, requestDelimited, responseDelimited) {', CLASS_NAME, RPC_IMPL).addIndent()
+                                .pushLine('%s.rpc.Service.call(this, %s, requestDelimited, responseDelimited);', PROTOBUF, RPC_IMPL).subIndent()
+                            .pushLine('}')
+                            .pushLine()
+                            .pushLine('(%s.prototype = Object.create(%s.rpc.Service.prototype)).constructor = %s;', CLASS_NAME, PROTOBUF, CLASS_NAME)
+                            .pushLine()
 
-                 codeGen.pushLine("return %s;", VALUES).subIndent()
-                    .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, ENUM_PLACEHOLDER, KEY).subIndent()
+                        if (this._config.create) {
+                            // create
+                            this._config.comments && this._codeGen.pushComments([
+                                "Creates new service using the specified rpc implementation.",
+                                "@function create",
+                                "@static",
+                                `@param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
+                                "@param {boolean} [requestDelimited=false] Whether requests are length-delimited",
+                                "@param {boolean} [responseDelimited=false] Whether responses are length-delimited",
+                                "@returns RPC service. Useful where requests and/or responses are streamed."
+                            ]);
+                            this._codeGen
+                            .pushLine("%s.create = function(%s, requestDelimited, responseDelimited) {", CLASS_NAME, RPC_IMPL).addIndent()
+                                .pushLine("return new %s(%s, requestDelimited, responseDelimited);", CLASS_NAME, RPC_IMPL).subIndent()
+                            .pushLine("};")
+                            .pushLine();
+                        }
+
+                        // setup rpc methods
+                        this._codeGen
+                            .pushLine("// setup RPC methods")
+                            .pushLine("for (var %s in %s) {", RPC_METHOD, FIELD_PAYLOADS).addIndent()
+                                .pushLine("var rpc = function(request, callback) {").addIndent()
+                                    .pushLine("return this.rpcCall(rpc, %s[%s[%s][0]], %s[%s[%s][1]], request, callback);", ROOT, FIELD_PAYLOADS, RPC_METHOD, ROOT, FIELD_PAYLOADS, RPC_METHOD).subIndent()
+                                .pushLine("};")
+                                .pushLine("Object.defineProperty(%s.prototype[%s] = rpc, 'name', { value: %s });", CLASS_NAME, RPC_METHOD, RPC_METHOD).subIndent()
+                            .pushLine("}")
+                            .pushLine()
+
+                            // return constructor
+                            .pushLine("return %s;", CLASS_NAME).subIndent()
+                        // passing module[key], key to create class
+                        .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, SERVICE_PLACEHOLDER, KEY).subIndent();
+
+                    // handle enum
+                    this._codeGen
+                    .pushLine("} else if (%s[%s]['%s'] && Object.values(%s[%s]['%s']).every(function(v) { return Number(v) === v; })) {", NAMESPACE, KEY, ENUM_PLACEHOLDER, NAMESPACE, KEY, ENUM_PLACEHOLDER).addIndent()
+                        .pushLine("// protobuf.enum")
+                        .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent()
+                            .pushLine("var %s = Object.keys(%s);", KEYS, FIELD_PAYLOADS)
+                            .pushLine("var %s = {};", VALUES)
+                            .pushLine("for (var i = 0; i < %s.length; i ++) {", KEYS).addIndent()
+                                .pushLine("%s[%s[%s[i]] = %s[%s[i]]] = %s[i];", VALUES, VALUES, KEYS, FIELD_PAYLOADS, KEYS, KEYS).subIndent()
+                            .pushLine("}");
+                        if (this._config.verify) {
+                            this._codeGen
+                            .pushLine("var vals = {};")
+                            .pushLine("%s.forEach(function (i) { vals[%s[i]] = 1; });", KEYS, VALUES)
+                            .pushLine("%s.%s = vals;", VALUES, RESOLVED_TYPE);
+                        }
+
+                     this._codeGen.pushLine("return %s;", VALUES).subIndent()
+                        .pushLine("})(%s[%s]['%s'], %s);", NAMESPACE, KEY, ENUM_PLACEHOLDER, KEY).subIndent()
+                    .pushLine("}")
+                    .pushLine()
+                    // exposing 'A.B.C' like string literal index path to ROOT
+                    // helping encode/decode functions to index with all others pbtype
+                    .pushLine("// exposing non-inner type to %s", ROOT)
+                    .pushLine("%s[%s] && !%s && (%s[%s + '.' + %s] = %s[%s]);", PARENT, KEY, IS_INNER, ROOT, PATH, KEY, PARENT, KEY)//.subIndent()
+                    .pushLine()
+                    // delete parsed type and enum
+                    .pushLine("// delete parsed types")
+                    .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, MESSAGE_PLACEHOLDER)
+                    .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, SERVICE_PLACEHOLDER)
+                    .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, ENUM_PLACEHOLDER)
+                    // passing module, path, root to create namespace
+                    .pushLine("%s[%s] = _(%s[%s], %s ? %s + '.' + %s : %s, %s[%s] || {});", PARENT, KEY, NAMESPACE, KEY, PATH, PATH, KEY, KEY, PARENT, KEY).subIndent()
                 .pushLine("}")
-                .pushLine()
-                // exposing 'A.B.C' like string literal index path to ROOT
-                // helping encode/decode functions to index with all others pbtype
-                .pushLine("// exposing non-inner type to %s", ROOT)
-                .pushLine("%s[%s] && !%s && (%s[%s + '.' + %s] = %s[%s]);", PARENT, KEY, IS_INNER, ROOT, PATH, KEY, PARENT, KEY)//.subIndent()
-                .pushLine()
-                // delete parsed type and enum
-                .pushLine("// delete parsed types")
-                .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, MESSAGE_PLACEHOLDER)
-                .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, SERVICE_PLACEHOLDER)
-                .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, ENUM_PLACEHOLDER)
-                // passing module, path, root to create namespace
-                .pushLine("%s[%s] = _(%s[%s], %s ? %s + '.' + %s : %s, %s[%s] || {});", PARENT, KEY, NAMESPACE, KEY, PATH, PATH, KEY, KEY, PARENT, KEY).subIndent()
-            .pushLine("}")
-            .pushLine("return %s;", PARENT).subIndent()
-        .pushLine("})({").addIndent();
-    
-    // passing namespaces map as params
-    root.resolveAll();
-    writeNamespace(codeGen, root, true);
-    
-    // closing brackets
-    codeGen.subIndent()
-        .pushLine("}, '', %s, false);", ROOT)
-        .pushLine()
-        .pushLine("// exposing '%s' to global/window", root.name)
-        .pushLine("%s.util.global['%s'] = %s['%s'];", PROTOBUF, root.name, ROOT, root.name);
-
-    callback(null, codeGen.toString());
-}
-
-// namespaces properties array
-function writeNamespace(codeGen: SimpleCodeGen, ns: protobuf.NamespaceBase, isLastOne: boolean) {
-    if (!ns.name) throw new Error('namespace needs a name');
-
-    codeGen.pushLine("%s: {", ns.name).addIndent();
-    // sort before iteration to avoid meanless modification to VCS
-    ns.nestedArray.sort((a, b) => a.name.localeCompare(b.name));
-    ns.nestedArray.forEach((nested, index, arr) => {
-        const isLastOne = index === arr.length - 1;
-        if (nested instanceof protobuf.Type) {
-            writeType(codeGen, nested, isLastOne);
-        } else if (nested instanceof protobuf.Service) {
-            writeService(codeGen, nested, isLastOne);
-        } else if (nested instanceof protobuf.Enum) {
-            writeEnum(codeGen, nested, isLastOne);
-        } else if (nested instanceof protobuf.Namespace) {
-            writeNamespace(codeGen, nested, isLastOne);
-        } else {
-            console.warn(`nested type ${nested.fullName} is not support yet.`);
-        }
-    });
-    codeGen.subIndent().pushLine("}%s", isLastOne ? '' : ',');
-}
-
-function writeType(codeGen: SimpleCodeGen, type: protobuf.Type, isLastOne: boolean) {
-    let props: any = {};
-    // 1-based field id
-    let fieldIds = Object.keys(type.fieldsById).map(id => parseInt(id));
-    for (let id of fieldIds) {
-        let field = type.fieldsById[id];
-        let fieldAttr: any[] = [];
-        fieldAttr.push(field.name);
-        let fieldType = field.resolvedType ? field.resolvedType.fullName : field.type;
-        if (field.map) {
-            // map field is marked by a heading '{',
-            // follows with the comma delimited keyType and valueType
-            let mapField: protobuf.MapField = <any>field;
-            fieldAttr.push(`{${mapField.keyType},${fieldType}`);
-            // map field's default value set to null here
-            fieldAttr.push(null);
-        } else if (field.repeated) {
-            // repeated field is marked by a heading '[', or '<' if packed
-            fieldAttr.push(`${field.packed ? '<' : '['}${fieldType}`);
-            // repeated field's default value set to null here
-            fieldAttr.push(null);
-        } else {
-            fieldAttr.push(fieldType);
-            if (NUMBERIC64_ARR.includes(fieldType)) {
-                // 64bit numberic
-                if (config.forceLong) {
-                    // resolve again as long
-                    field.long = true;
-                } else if (config.forceNumber) {
-                    // resolve again as non-long
-                    field.long = false;
-                }
-                field.resolved = false;
-                field.resolve();
-            }
-            fieldAttr.push(field.defaultValue);
-        }
-        props[id] = fieldAttr;
+                .pushLine("return %s;", PARENT).subIndent()
+            .pushLine("})({").addIndent();
     }
-    codeGen.pushLine("%s: {", type.name).addIndent()
-        .pushLine("'%s': %j%s", MESSAGE_PLACEHOLDER, props, type.nestedArray.length > 0 ? ',' : '');
 
-    if (type.nestedArray.length) {
-        // sort before iteration to avoid meanless modification to VCS
-        type.nestedArray.sort((a, b) => a.name.localeCompare(b.name));
-        type.nestedArray.forEach((nested, index, arr) => {
-            const isLastOne = index === arr.length - 1;
-            if (nested instanceof protobuf.Type) {
-                writeType(codeGen, nested, isLastOne);
-            } else if (nested instanceof protobuf.Enum) {
-                writeEnum(codeGen, nested, isLastOne);
+    protected _onExitRoot(root: protobuf.Root): void {
+        // closing brackets
+        this._codeGen.subIndent()
+            .pushLine("}, '', %s, false);", ROOT)
+            .pushLine()
+            // exposing to global/window
+            .pushLine("// exposing '%s' to global/window", root.name)
+            .pushLine("%s.util.global['%s'] = %s['%s'];", PROTOBUF, root.name, ROOT, root.name)
+            .pushLine("exports.default = %s['%s'];", ROOT, root.name)
+            .pushLine();
+    }
+
+    protected _onEnterNamespace(ns: protobuf.NamespaceBase, _: boolean): void {
+        this._codeGen.pushLine("%s: {", ns.name).addIndent();
+    }
+
+    protected _onExitNamespace(ns: protobuf.NamespaceBase, isLastOne: boolean): void {
+        this._codeGen.subIndent().pushLine("}%s", isLastOne ? '' : ',');
+    }
+
+    protected _onEnterType(type: protobuf.Type, _: boolean): void {
+        let props: any = {};
+        // field id
+        let fieldIds = Object.keys(type.fieldsById).map(id => parseInt(id));
+        for (let id of fieldIds) {
+            let field = type.fieldsById[id];
+            let fieldAttr: any[] = [];
+            fieldAttr.push(field.name);
+            let fieldType = field.resolvedType ? field.resolvedType.fullName : field.type;
+            if (field.map) {
+                // map field is marked by a heading '{',
+                // follows with the comma delimited keyType and valueType
+                let mapField: protobuf.MapField = <any>field;
+                fieldAttr.push(`{${mapField.keyType},${fieldType}`);
+                // map field's default value set to null here
+                fieldAttr.push(null);
+            } else if (field.repeated) {
+                // repeated field is marked by a heading '[', or '<' if packed
+                fieldAttr.push(`${field.packed ? '<' : '['}${fieldType}`);
+                // repeated field's default value set to null here
+                fieldAttr.push(null);
             } else {
-                console.warn(`nested type ${nested.fullName} is not support yet.`);
+                fieldAttr.push(fieldType);
+                if (NUMBERIC64_ARR.includes(fieldType)) {
+                    // 64bit numberic
+                    if (this._config.forceLong) {
+                        // resolve again as long
+                        field.long = true;
+                    } else if (this._config.forceNumber) {
+                        // resolve again as non-long
+                        field.long = false;
+                    }
+                    field.resolved = false;
+                    field.resolve();
+                }
+                fieldAttr.push(field.defaultValue);
             }
-        });
-    }
-    codeGen.subIndent().pushLine("}%s", isLastOne ? '' : ',');
-}
-
-function writeService(codeGen: SimpleCodeGen, type: protobuf.Service, isLastOne: boolean) {
-    let props: any = {};
-    for (let method of Object.values(type.methods)) {
-        if (method.type === 'rpc') {
-            // resolve first
-            method.resolve();
-            if (!method.resolvedRequestType) {
-                console.error(`unable to resolve request type "${method.requestType}"`);
-                continue;
-            }
-            if (!method.resolvedResponseType) {
-                console.error(`unable to resolve response type "${method.responseType}"`);
-                continue;
-            }
-            props[method.name] = [ method.resolvedRequestType.fullName, method.resolvedResponseType.fullName ];
-        } else {
-            console.warn(`method ${type.fullName}.${method.name} of type ${method.type} not support yet.`);
+            props[id] = fieldAttr;
         }
+        this._codeGen.pushLine("%s: {", type.name).addIndent()
+            .pushLine("'%s': %j%s", MESSAGE_PLACEHOLDER, props, type.nestedArray.length > 0 ? ',' : '');
     }
-    codeGen
-        .pushLine("%s: {", type.name).addIndent()
-            .pushLine("'%s': %j", SERVICE_PLACEHOLDER, props).subIndent()
-        .pushLine("}%s", isLastOne ? '' : ',');
+
+    protected _onExitType(type: protobuf.Type, isLastOne: boolean): void {
+        this._codeGen.subIndent().pushLine("}%s", isLastOne ? '' : ',');
+    }
+
+    protected _onEnterService(type: protobuf.Service, isLastOne: boolean): void {
+        let props: any = {};
+        for (let method of Object.values(type.methods)) {
+            if (method.type === 'rpc') {
+                // resolve first
+                method.resolve();
+                if (!method.resolvedRequestType) {
+                    console.error(`unable to resolve request type "${method.requestType}"`);
+                    continue;
+                }
+                if (!method.resolvedResponseType) {
+                    console.error(`unable to resolve response type "${method.responseType}"`);
+                    continue;
+                }
+                props[method.name] = [ method.resolvedRequestType.fullName, method.resolvedResponseType.fullName ];
+            } else {
+                console.warn(`method ${type.fullName}.${method.name} of type '${method.type}' is not support yet.`);
+            }
+        }
+        this._codeGen
+            .pushLine("%s: {", type.name).addIndent()
+                .pushLine("'%s': %j", SERVICE_PLACEHOLDER, props).subIndent()
+            .pushLine("}%s", isLastOne ? '' : ',');
+    }
+
+    protected _onEnterEnum(type: protobuf.Enum, isLastOne: boolean): void {
+        this._codeGen
+            .pushLine("%s: {", type.name).addIndent()
+                .pushLine("'%s': %j", ENUM_PLACEHOLDER, type.values).subIndent()
+            .pushLine("}%s", isLastOne ? '' : ',');
+    }
 }
 
-function writeEnum(codeGen: SimpleCodeGen, type: protobuf.Enum, isLastOne: boolean) {
-    codeGen
-        .pushLine("%s: {", type.name).addIndent()
-            .pushLine("'%s': %j", ENUM_PLACEHOLDER, type.values).subIndent()
-        .pushLine("}%s", isLastOne ? '' : ',');
+function static_mini(root: protobuf.Root, options: IOptions, callback: Function): void {
+    if (options.forceLong && !protobuf.util.Long) {
+        throw new Error(`protobuf.util.Long is not available while '--force-long' option is specified`);
+    }
+    root.name = root.name || options.root || PACKAGE.name;
+    let writer = new JsWriter(options);
+    writer.exclude = (<any>global)['$minipbjs_exclude'];
+    writer.visit(root);
+    callback(null, writer.dump());
 }
 
 module.exports = static_mini;
