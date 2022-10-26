@@ -79,15 +79,15 @@ class DtsWriter extends RootVisitor {
             .pushLine("export default %s;", root.name);
     }
 
-    protected _onEnterNamespace(ns: protobuf.NamespaceBase, _: boolean): void {
+    protected _onEnterNested(ns: protobuf.NamespaceBase, isLastOne: boolean): void {
         this._codeGen
             .pushComments([ `Namespace ${ns.name}.` ])
             .pushLine("declare module %s {", ns.name).addIndent()
-            .pushLine()
+            .pushLine();
     }
 
-    protected _onExitNamespace(ns: protobuf.NamespaceBase, _: boolean): void {
-        this._codeGen.subIndent().pushLine("} /* end of %s */", ns.name);
+    protected _onExitNested(ns: protobuf.NamespaceBase, isLastOne: boolean): void {
+        this._codeGen.subIndent().pushLine("} /* end of %s */", ns.name).pushLine();
     }
 
     protected _onEnterType(type: protobuf.Type, isLastOne: boolean): void {

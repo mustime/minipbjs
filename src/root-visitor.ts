@@ -34,6 +34,14 @@ export default abstract class RootVisitor {
         if (this._exclusiveNamespaces.includes(ns.fullName)) return;
 
         this._onEnterNamespace(ns, isLastOne);
+        if (ns.nestedArray.length) {
+            this._visitNested(ns);
+        }
+        this._onExitNamespace(ns, isLastOne);
+    }
+
+    protected _visitNested(ns: protobuf.NamespaceBase): void {
+        this._onEnterNested(ns, true);
         // sort before iteration to avoid meanless modification to VCS
         ns.nestedArray.sort((a, b) => a.name.localeCompare(b.name));
         ns.nestedArray.forEach((nested, index, arr) => {
@@ -50,24 +58,14 @@ export default abstract class RootVisitor {
                 console.warn(`nested type ${nested.fullName} is not support yet.`);
             }
         });
-        this._onExitNamespace(ns, isLastOne);
+        this._onExitNested(ns, true);
     }
 
     protected _visitType(type: protobuf.Type, isLastOne: boolean) {
         this._onEnterType(type, isLastOne);
+        // type itself, is a namespace. check its nested types
         if (type.nestedArray.length) {
-            // sort before iteration to avoid meanless modification to VCS
-            type.nestedArray.sort((a, b) => a.name.localeCompare(b.name));
-            type.nestedArray.forEach((nested, index, arr) => {
-                const isLastOne = index === arr.length - 1;
-                if (nested instanceof protobuf.Type) {
-                    this._visitType(nested, isLastOne);
-                } else if (nested instanceof protobuf.Enum) {
-                    this._visitEnum(nested, isLastOne);
-                } else {
-                    console.warn(`nested type ${nested.fullName} is not support yet.`);
-                }
-            });
+            this._visitNested(type);
         }
         this._onExitType(type, isLastOne);
     }
@@ -87,6 +85,9 @@ export default abstract class RootVisitor {
 
     protected _onEnterNamespace(ns: protobuf.NamespaceBase, isLastOne: boolean): void { /* EMPTY */ }
     protected _onExitNamespace(ns: protobuf.NamespaceBase, isLastOne: boolean): void { /* EMPTY */ }
+
+    protected _onEnterNested(ns: protobuf.NamespaceBase, isLastOne: boolean): void { /* EMPTY */ }
+    protected _onExitNested(ns: protobuf.NamespaceBase, isLastOne: boolean): void { /* EMPTY */ }
 
     protected _onEnterType(type: protobuf.Type, isLastOne: boolean): void { /* EMPTY */ }
     protected _onExitType(type: protobuf.Type, isLastOne: boolean): void { /* EMPTY */ }
