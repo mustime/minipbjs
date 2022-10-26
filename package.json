@@ -1,13 +1,13 @@
 {
   "name": "minipbjs",
-  "version": "0.4.0",
+  "version": "0.4.2",
   "description": "minimizes javascript created by pbjs for code size reduction",
   "main": "cli/index.js",
   "bin": {
     "minipbjs": "bin/minipbjs"
   },
   "scripts": {
-    "test": "tsc --build && rm tests/**/protobuf-bundles*.js && tape 'tests/**/test.js'",
+    "test": "tsc --build && tape 'tests/**/test.js'",
     "build": "tsc --build",
     "prepublishOnly": "tsc --build && chmod +x bin/minipbjs"
   },

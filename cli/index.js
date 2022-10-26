@@ -74,7 +74,7 @@ exports.main = function (argv) {
     } else {
         libraryPath = path.relative(output, path.resolve(libraryPath));
     }
-    global['$minipbjs_libpath'] = libraryPath;
+    global['$minipbjs_libpath'] = libraryPath.replace(/\\/g, '/');
 
     // excludsive protos
     var exclusiveList = getOptionValue(argv, 'exclude');
