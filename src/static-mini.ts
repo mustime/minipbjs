@@ -121,7 +121,7 @@ class JsWriter extends RootVisitor {
             if (this._config.verify) {
                 this._codeGen
                     .pushLine("function %s({ %s, %s, %s, %s }, %s) {", INVALID, NAME, REPEATED, FIELD_MAP, KEY_TYPE, EXPECTED).addIndent()
-                        .pushLine("return %s + ': ' + %s + (%s && %s !== '%s' ? '[]' : %s && %s !== '%s' ? '{k:'+%s+'}' : '') + ' %s';", NAME, EXPECTED, REPEATED, EXPECTED, FIELD_REPEATED, FIELD_MAP, EXPECTED, OBJECT, KEY_TYPE, EXPECTED).subIndent()
+                        .pushLine("return %s + ': ' + %s + (%s && %s !== '%s' ? '[]' : %s && %s !== '%s' ? `{k:${%s}}` : '') + ' %s';", NAME, EXPECTED, REPEATED, EXPECTED, FIELD_REPEATED, FIELD_MAP, EXPECTED, OBJECT, KEY_TYPE, EXPECTED).subIndent()
                     .pushLine("}")
                     .pushLine("var %s = { int32: 'key32Re', uint32: 'key32Re', sint32: 'key32Re', fixed32: 'key32Re', sfixed32: 'key32Re', int64: 'key64Re', uint64: 'key64Re', sint64: 'key64Re', fixed64: 'key64Re', sfixed64: 'key64Re', bool: 'key2Re' };", KEY_VERIFY_MAP)
                     .pushLine("function %s(%s, %s, %s) {", VERIFY_KEY_FUNC, TYPE, MESSAGE, FIELD_INFO).addIndent()
@@ -342,7 +342,8 @@ class JsWriter extends RootVisitor {
                     .pushLine("if (%s[%s]['%s'] && Object.keys(%s[%s]['%s']).every(function(k) { return Number(k); })) {", NAMESPACE, KEY, MESSAGE_PLACEHOLDER, NAMESPACE, KEY, MESSAGE_PLACEHOLDER).addIndent()
                         // protobuf.type. create classes to namespace
                         .pushLine("// protobuf.type")
-                        .pushLine("if (%s[%s]) throw Error('field ' + path + '.' + key + ' has already existed');", PARENT, KEY)
+                        .pushLine("if (%s[%s]) throw Error(`nested type ${%s}.${%s} has already exist`);", PARENT, KEY, PARENT, KEY)
+                        .pushLine()
                         .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
                             // constructor
                             this._config.comments && this._codeGen.pushComments([
@@ -385,7 +386,7 @@ class JsWriter extends RootVisitor {
                                     .pushLine("// { key: value } => { '1': [ '$1', <key>, null ], '2': [ '$2', <value>, null ] }")
                                     .pushLine("$%s[%s] = {", NAMESPACE, TYPE).addIndent()
                                         .pushLine("'%s': %s.substring(1).split(',')", MESSAGE_PLACEHOLDER, TYPE).addIndent()
-                                            .pushLine(".map(function(t, i) { return ['$' + (i + 1), t, null] })")
+                                            .pushLine(".map(function(t, i) { return [`$${i + 1}`, t, null] })")
                                             .pushLine(".reduce(function(m, o, i) { m[i + 1] = o; return m; }, {})").subIndent().subIndent()
                                     .pushLine("};").subIndent()
                                 .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
@@ -448,7 +449,7 @@ class JsWriter extends RootVisitor {
                                                 .pushLine("%s[%s] = {};", MESSAGE, FIELD).subIndent()
                                             .pushLine("}")
                                             .pushLine("// decode map fields from inner namespace")
-                                            .pushLine("var $%s = %s[%s].$%s[%s].decode(%s, %s.uint32());", MESSAGE, PARENT, KEY, NAMESPACE, TYPE, READER, READER)
+                                            .pushLine("var $%s = %s.$%s[%s].decode(%s, %s.uint32());", MESSAGE, CLASS_NAME, NAMESPACE, TYPE, READER, READER)
                                             .pushLine("%s[%s][$%s['$1']] = $%s['$2'];", MESSAGE, FIELD, MESSAGE, MESSAGE).subIndent()
                                         .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
                                             .pushLine("// repeated field")
@@ -522,7 +523,7 @@ class JsWriter extends RootVisitor {
                                             .pushLine("for (var i = 0, %s = Object.keys(%s[%s]); i < %s.length; ++ i) {", KEYS, MESSAGE, FIELD, KEYS).addIndent()
                                                 .pushLine("%s.uint32((%s << 3 | 2) >> 0).fork();", WRITER, FIELD_ID)
                                                 .pushLine("// encode map fields from inner namespace")
-                                                .pushLine("%s[%s].$%s[%s].encode({ '$1': %s[i], '$2': %s[%s][%s[i]] }, %s).ldelim();", PARENT, KEY, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS, WRITER).subIndent()
+                                                .pushLine("%s.$%s[%s].encode({ '$1': %s[i], '$2': %s[%s][%s[i]] }, %s).ldelim();", CLASS_NAME, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS, WRITER).subIndent()
                                             .pushLine("}").subIndent()
                                         .pushLine("}").subIndent()
                                     .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
@@ -584,7 +585,7 @@ class JsWriter extends RootVisitor {
                                 `@param {${CLASS_NAME}} message`
                             ]);
                             this._codeGen.pushLine("%s.fromObject = function(%s) {", CLASS_NAME, OBJECT).addIndent()
-                                .pushLine("if (%s instanceof %s[%s]) return %s;", OBJECT, PARENT, KEY, OBJECT)
+                                .pushLine("if (%s instanceof %s) return %s;", OBJECT, CLASS_NAME, OBJECT)
                                 .pushLine("var %s = new %s();", MESSAGE, CLASS_NAME)
                                 .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
                                     .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
@@ -593,7 +594,7 @@ class JsWriter extends RootVisitor {
                                     .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
                                         .pushLine("// map field")
                                         .pushLine("if (!%s) continue;", PROPERTY)
-                                        .pushLine("if (typeof %s !== 'object') throw TypeError(%s + '.' + %s + '.' + %s + ': object expected');", PROPERTY, PATH, KEY, FIELD)
+                                        .pushLine("if (typeof %s !== 'object') throw TypeError(`${%s}.${%s}.${%s}: object expected`);", PROPERTY, PATH, KEY, FIELD)
                                         .pushLine("var %s = {};", FIELD_MAP)
                                         .pushLine("var %s = %s.substring(1).split(',')[1];", VALUE_TYPE, TYPE)
                                         .pushLine("for (var i = 0, %s = Object.keys(%s); i < %s.length; ++ i) {", KEYS, PROPERTY, KEYS).addIndent()
@@ -603,7 +604,7 @@ class JsWriter extends RootVisitor {
                                     .pushLine("} else if (%s.charAt(0) === '[' || %s.charAt(0) === '<') {", TYPE, TYPE).addIndent()
                                         .pushLine("// repeated field")
                                         .pushLine("if (!%s) continue;", PROPERTY)
-                                        .pushLine("if (!Array.isArray(%s)) throw TypeError(%s + '.' + %s + '.' + %s + ': arary excepted');", PROPERTY, PATH, KEY, TYPE)
+                                        .pushLine("if (!Array.isArray(%s)) throw TypeError(`${%s}.${%s}.${%s}: array excepted`);", PROPERTY, PATH, KEY, TYPE)
                                         .pushLine("var %s = [];", FIELD_REPEATED)
                                         .pushLine("%s = %s.substring(1);", TYPE, TYPE)
                                         .pushLine("for (var i = 0; i < %s.length; i ++) {", PROPERTY).addIndent()
@@ -704,7 +705,7 @@ class JsWriter extends RootVisitor {
                                 .pushLine("for (var %s in %s) {", FIELD_ID, FIELD_PAYLOADS).addIndent()
                                     .pushLine("var %s = %s[%s][0];", FIELD, FIELD_PAYLOADS, FIELD_ID)
                                     .pushLine("var %s = %s[%s][1];", TYPE, FIELD_PAYLOADS, FIELD_ID)
-                                    .pushLine("var %s = %s + '.' + %s + '.' + %s;", FIELD_NAME, PATH, KEY, FIELD)
+                                    .pushLine("var %s = `${%s}.${%s}.${%s}`;", FIELD_NAME, PATH, KEY, FIELD)
                                     .pushLine("if (%s.charAt(0) === '{') {", TYPE).addIndent()
                                         // map fields are inner namespace for current class
                                         .pushLine("// map field")
@@ -712,8 +713,8 @@ class JsWriter extends RootVisitor {
                                             .pushLine("if (!%s.util.isObject(%s[%s])) return %s({ %s: %s, %s: true }, 'object');", PROTOBUF, MESSAGE, FIELD, INVALID, NAME, FIELD_NAME, FIELD_MAP, )
                                             .pushLine("var %s = Object.keys(%s[%s]);", KEYS, MESSAGE, FIELD)
                                             .pushLine("for (var i = 0; i < %s.length; ++i) {", KEYS).addIndent()
-                                                .pushLine("%s[%s].$%s[%s].%s = %s", PARENT, KEY, NAMESPACE, TYPE, INNER_FIELD_NAME, FIELD_NAME)
-                                                .pushLine("var error = %s[%s].$%s[%s].verify({ '$1': %s[i], '$2': %s[%s][%s[i]] });", PARENT, KEY, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS)
+                                                .pushLine("%s.$%s[%s].%s = %s", CLASS_NAME, NAMESPACE, TYPE, INNER_FIELD_NAME, FIELD_NAME)
+                                                .pushLine("var error = %s.$%s[%s].verify({ '$1': %s[i], '$2': %s[%s][%s[i]] });", CLASS_NAME, NAMESPACE, TYPE, KEYS, MESSAGE, FIELD, KEYS)
                                                 .pushLine("if (error) return error;").subIndent()
                                             .pushLine("}").subIndent()
                                         .pushLine("}").subIndent()
@@ -725,7 +726,7 @@ class JsWriter extends RootVisitor {
                                             .pushLine("return %s({ %s: %s, %s: true }, 'array')", INVALID, NAME, FIELD_NAME, REPEATED).subIndent()
                                         .pushLine("}")
                                         .pushLine("for (var i = 0; i < %s.length; i ++) {", FIELD_REPEATED).addIndent()
-                                            .pushLine("var error = %s['%s'](%s, %s[i], { %s: %s + '[' + i + ']', %s: true });", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED, NAME, FIELD_NAME, REPEATED)
+                                            .pushLine("var error = %s['%s'](%s, %s[i], { %s: `${%s}[${i}]`, %s: true });", VERIFIER_FUNCTIONS, TYPE_PLACEHOLDER, TYPE, FIELD_REPEATED, NAME, FIELD_NAME, REPEATED)
                                             .pushLine("if (error) return error;").subIndent()
                                         .pushLine("}").subIndent()
                                     .pushLine("} else {").addIndent()
@@ -761,12 +762,12 @@ class JsWriter extends RootVisitor {
                         .pushLine("%s[%s] = (function(%s, %s) {", PARENT, KEY, FIELD_PAYLOADS, KEY).addIndent();
                             // constructor
                             this._config.comments && this._codeGen.pushComments([
-                                "* Constructs a new service.",
-                                `* @extends ${PROTOBUF}.rpc.Service`,
-                                "* @constructor",
-                                `* @param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
-                                "* @param {boolean} [requestDelimited=false] Whether requests are length-delimited",
-                                "* @param {boolean} [responseDelimited=false] Whether responses are length-delimited"
+                                "Constructs a new service.",
+                                `@extends ${PROTOBUF}.rpc.Service`,
+                                "@constructor",
+                                `@param {${PROTOBUF}.RPCImpl} ${RPC_IMPL} RPC implementation`,
+                                "@param {boolean} [requestDelimited=false] Whether requests are length-delimited",
+                                "@param {boolean} [responseDelimited=false] Whether responses are length-delimited"
                             ]);
                             this._codeGen
                             .pushLine('function %s(%s, requestDelimited, responseDelimited) {', CLASS_NAME, RPC_IMPL).addIndent()
@@ -798,10 +799,12 @@ class JsWriter extends RootVisitor {
                         this._codeGen
                             .pushLine("// setup RPC methods")
                             .pushLine("for (var %s in %s) {", RPC_METHOD, FIELD_PAYLOADS).addIndent()
-                                .pushLine("var rpc = function(request, callback) {").addIndent()
+                                .pushLine("function rpc(request, callback) {").addIndent()
                                     .pushLine("return this.rpcCall(rpc, %s[%s[%s][0]], %s[%s[%s][1]], request, callback);", ROOT, FIELD_PAYLOADS, RPC_METHOD, ROOT, FIELD_PAYLOADS, RPC_METHOD).subIndent()
                                 .pushLine("};")
-                                .pushLine("Object.defineProperty(%s.prototype[%s] = rpc, 'name', { value: %s });", CLASS_NAME, RPC_METHOD, RPC_METHOD).subIndent()
+                                .pushLine("Object.defineProperty(rpc, 'name', { value: %s });", RPC_METHOD)
+                                .pushLine("Object.defineProperty(rpc, 'path', { value: `${%s}.${%s}` });", PATH, KEY)
+                                .pushLine("%s.prototype[%s] = rpc;", CLASS_NAME, RPC_METHOD).subIndent()
                             .pushLine("}")
                             .pushLine()
 
@@ -834,7 +837,7 @@ class JsWriter extends RootVisitor {
                     // exposing 'A.B.C' like string literal index path to ROOT
                     // helping encode/decode functions to index with all others pbtype
                     .pushLine("// exposing non-inner type to %s", ROOT)
-                    .pushLine("%s[%s] && !%s && (%s[%s + '.' + %s] = %s[%s]);", PARENT, KEY, IS_INNER, ROOT, PATH, KEY, PARENT, KEY)//.subIndent()
+                    .pushLine("%s[%s] && !%s && (%s[`${%s}.${%s}`] = %s[%s]);", PARENT, KEY, IS_INNER, ROOT, PATH, KEY, PARENT, KEY)
                     .pushLine()
                     // delete parsed type and enum
                     .pushLine("// delete parsed types")
@@ -842,7 +845,7 @@ class JsWriter extends RootVisitor {
                     .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, SERVICE_PLACEHOLDER)
                     .pushLine("delete %s[%s]['%s'];", NAMESPACE, KEY, ENUM_PLACEHOLDER)
                     // passing module, path, root to create namespace
-                    .pushLine("%s[%s] = _(%s[%s], %s ? %s + '.' + %s : %s, %s[%s] || {});", PARENT, KEY, NAMESPACE, KEY, PATH, PATH, KEY, KEY, PARENT, KEY).subIndent()
+                    .pushLine("%s[%s] = _(%s[%s], %s ? `${%s}.${%s}` : %s, %s[%s] || {});", PARENT, KEY, NAMESPACE, KEY, PATH, PATH, KEY, KEY, PARENT, KEY).subIndent()
                 .pushLine("}")
                 .pushLine("return %s;", PARENT).subIndent()
             .pushLine("})({").addIndent();
