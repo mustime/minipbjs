@@ -806,14 +806,15 @@ class JsWriter extends RootVisitor {
                         // setup rpc methods
                         this._codeGen
                             .pushLine("// setup RPC methods")
-                            .pushLine("for (var %s in %s) {", RPC_METHOD, FIELD_PAYLOADS).addIndent()
+                            .pushLine("Object.keys(%s).forEach(function(%s) {", FIELD_PAYLOADS, RPC_METHOD).addIndent()
+                                .pushLine("var %s = %s[%s];", FIELD_PAYLOAD, FIELD_PAYLOADS, RPC_METHOD)
                                 .pushLine("function rpc(request, callback) {").addIndent()
-                                    .pushLine("return this.rpcCall(rpc, %s[%s[%s][0]], %s[%s[%s][1]], request, callback);", ROOT, FIELD_PAYLOADS, RPC_METHOD, ROOT, FIELD_PAYLOADS, RPC_METHOD).subIndent()
+                                    .pushLine("return this.rpcCall(rpc, %s[%s[0]], %s[%s[1]], request, callback);", ROOT, FIELD_PAYLOAD, ROOT, FIELD_PAYLOAD).subIndent()
                                 .pushLine("};")
                                 .pushLine("Object.defineProperty(rpc, 'name', { value: %s });", RPC_METHOD)
                                 .pushLine("Object.defineProperty(rpc, 'path', { value: `${%s}.${%s}` });", PATH, KEY)
                                 .pushLine("%s.prototype[%s] = rpc;", CLASS_NAME, RPC_METHOD).subIndent()
-                            .pushLine("}")
+                            .pushLine("});")
                             .pushLine()
 
                             // return constructor
